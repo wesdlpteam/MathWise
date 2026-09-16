@@ -1,0 +1,17 @@
+# Textbooks and calculator guidebooks. Reference material only, the app never
+# reads them. Copyright + far over GitHub's 100MB file limit. Never commit.
+*.pdf
+
+# IB subject guides. IB copyright, not needed at runtime. Keep local only.
+IBDP_*.md
+IB_MYP_*.md
+
+# Secrets
+.env
+.env.*
+*.key
+
+# Local tooling state
+.superpowers/
+.DS_Store
+Thumbs.db
