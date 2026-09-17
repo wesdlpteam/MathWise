@@ -74,6 +74,13 @@ p{margin:0 0 .7rem}
   border-bottom:1px solid var(--rule);padding-bottom:14px;margin-bottom:20px;flex-wrap:wrap}
 .masthead .sub{color:var(--slate);font-size:.88rem;margin-top:2px}
 .course-pick{text-align:right;font-size:.84rem;color:var(--slate)}
+/* Staff link to the dashboard. Deliberately quiet: students have no reason to
+   use it, and the page behind it asks for a password anyway. */
+.stats-link{display:inline-flex;align-items:center;justify-content:center;width:30px;
+  height:30px;border-radius:6px;color:var(--slate);opacity:.55;transition:opacity .15s,
+  color .15s,background .15s;margin-bottom:6px}
+.stats-link:hover,.stats-link:focus-visible{opacity:1;color:var(--gold);background:var(--mist)}
+.stats-link svg{width:18px;height:18px}
 .course-pick select{width:auto;min-width:210px;margin-top:4px}
 .badge{display:inline-block;background:var(--mist);border:1px solid var(--rule);
   border-left:3px solid var(--gold);padding:4px 9px;font-size:.82rem;color:var(--purple);border-radius:3px}
@@ -6542,6 +6549,13 @@ function renderApp(){
           <div class="sub">${c.key ? esc(c.name) : "Wesley College Mathematics"}</div>
         </div>
         <div class="course-pick">
+          <div><a class="stats-link" href="stats.html" target="_blank" rel="noopener"
+            title="Staff dashboard" aria-label="Staff dashboard, opens in a new tab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 20V4"/><path d="M3 20h18"/><path d="M7 16v-4"/>
+              <path d="M12 16V7"/><path d="M17 16v-6"/>
+            </svg></a></div>
           <label for="course" style="margin:0">Your course <span class="small">(optional)</span></label>
           <select id="course">
             <option value="" ${!c.key ? "selected" : ""}>${esc(COURSES[0].name)}</option>
