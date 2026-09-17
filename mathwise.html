@@ -1772,49 +1772,43 @@ const S = {
 };
 
 /* --- API ------------------------------------------------------------ *
- * Personal-testing setup: the API key lives only in this browser's
- * localStorage, entered once via a prompt. It is never written into this
- * file and never committed to git. This uses Anthropic's direct-browser-
- * access header, which exists for exactly this kind of local prototyping —
- * it is not a safe way to hand the app to students, since anyone using the
- * same browser profile could reuse a key stored here. Before this goes to
- * students, replace this with a small server-side proxy that holds the key
- * privately instead.
+ * Every request goes to MathWISE's own backend (api/claude.js on Vercel),
+ * which holds the Anthropic key and passes the request on. The key is never
+ * sent to a browser, so the app can be shared with a plain link and nobody
+ * needs one of their own.
+ *
+ * That moves the spending risk onto whoever owns the key, so the backend
+ * clamps every cost knob a caller could turn and rate limits by address. The
+ * hard backstop is a spend cap set on the Anthropic console; nothing in this
+ * file can enforce one.
  * ------------------------------------------------------------------ */
 
-function getApiKey(){
-  let key = localStorage.getItem("mw_api_key");
-  if (!key){
-    key = window.prompt("Enter your Anthropic API key (starts with sk-ant-). "
-      + "This is saved only in this browser, never in the file or in git.");
-    if (key) localStorage.setItem("mw_api_key", key.trim());
-  }
-  return key ? key.trim() : "";
-}
+// Every request goes through MathWISE's own backend, which holds the API key.
+// Always absolute, never relative: the app is served from GitHub Pages while the
+// backend runs on Vercel, and opening the file straight off a disk still needs to
+// reach it. This is deliberately unlike the analytics sender, which stays silent
+// when run locally so test sessions never reach the real database.
+const TUTOR_API = "https://mathwise-xi.vercel.app/api/claude";
 
 async function callClaude(system, messages, maxTokens, purpose){
-  const key = getApiKey();
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(TUTOR_API, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
-    },
+    headers: { "Content-Type": "application/json" },
     // The system prompt is identical on every call of a given purpose within
     // a conversation (courseContext(S.courseKey) doesn't change mid-session),
     // so caching it costs nothing to add here and helps every call site —
     // it's simply inert on prompts too short to meet the cache minimum.
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens || 1000,
+    body: JSON.stringify({ max_tokens: maxTokens || 1000,
       system: [{ type:"text", text:system, cache_control:{ type:"ephemeral" } }],
       messages })
   });
-  if (res.status === 401){
-    localStorage.removeItem("mw_api_key");
-    throw new Error("That API key wasn't accepted. Try again — you'll be asked to re-enter it.");
+  if (!res.ok){
+    // The backend never returns anything that names the key or the account, so
+    // its own message is safe to show and is usually the more useful one.
+    let msg = "MathWISE could not be reached. Try again in a moment.";
+    try { const e = await res.json(); if (e && e.error) msg = e.error; } catch (err){}
+    throw new Error(msg);
   }
-  if (!res.ok) throw new Error("MathWISE could not be reached. Try again in a moment.");
   const data = await res.json();
   logUsage(purpose || "other", MODEL, data.usage);  // REMOVABLE — see the "Cost analysis" module
   const text = (data.content || []).filter(b => b.type === "text")
@@ -10345,7 +10339,7 @@ function renderNetworkPanel(){
 
 function takePhoto(file){
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024){
+  if (file.size > 3 * 1024 * 1024){
     S.intakeError = "That image is too large. Take the photo again at a smaller size."; render(); return;
   }
   const reader = new FileReader();
@@ -10376,7 +10370,7 @@ function takePhoto(file){
 // history, so it goes through submit() like any other reply.
 function sendAttemptPhoto(file){
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024){
+  if (file.size > 3 * 1024 * 1024){
     S.attemptError = "That image is too large. Take the photo again at a smaller size."; render(); return;
   }
   const reader = new FileReader();
@@ -10837,7 +10831,7 @@ function fbListHtml(){
 
 function readMarkedWork(file){
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024){
+  if (file.size > 3 * 1024 * 1024){
     S.fbError = "That image is too large. Take the photo again at a smaller size."; render(); return;
   }
   const reader = new FileReader();
@@ -11034,6 +11028,10 @@ document.addEventListener("click", () => analyticsTouch(), true);
 window.addEventListener("focus", () => analyticsTouch());
 // Anything stranded by a closed laptop or a dropped connection goes now.
 flushOutbox();
+// MathWISE used to ask each person for their own API key and keep it here.
+// The backend holds the key now, so clear out any old one rather than leaving
+// a working credential sitting in someone's browser.
+try { localStorage.removeItem("mw_api_key"); } catch (e){ /* nothing to clean up */ }
 
 if (new URLSearchParams(location.search).get("selftest") === "1") runSelfTest();
 else render();

@@ -5,6 +5,9 @@ const ALLOWED_ORIGINS = [
   "http://localhost:5500",
   "http://127.0.0.1:5500",
   "http://localhost:3000",
+  // The local static server used when testing mathwise.html on this machine.
+  "http://localhost:8777",
+  "http://127.0.0.1:8777",
 ];
 
 export function safeEqual(a, b) {
@@ -23,9 +26,21 @@ export function applyCors(req, res, methods = "POST, OPTIONS") {
   const origin = req.headers.origin;
   if (ALLOWED_ORIGINS.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Access-Control-Allow-Methods", methods);
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-mw-admin");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-mw-admin, x-mw-passcode");
   if (req.method === "OPTIONS") { res.status(200).end(); return true; }
   return false;
+}
+
+// Open mode: with no STUDENT_PASSCODE set, anyone with the link can use the
+// tutor, and the Anthropic spend cap is the backstop. Set one on the Vercel
+// project to require it, and the app will ask each student for it once.
+export function requireStudent(req, res) {
+  if (!process.env.STUDENT_PASSCODE) return true;
+  if (!safeEqual(req.headers["x-mw-passcode"], process.env.STUDENT_PASSCODE)) {
+    res.status(401).json({ error: "Invalid passcode" });
+    return false;
+  }
+  return true;
 }
 
 export function requireAdmin(req, res) {
