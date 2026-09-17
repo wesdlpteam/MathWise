@@ -39,6 +39,13 @@ code{background:var(--track);padding:1px 5px;border-radius:3px;font-size:.85em}
 .wordmark{font-weight:700;color:var(--purple);letter-spacing:-.02em;font-size:1.85rem;
   line-height:1;margin:0}
 .wordmark .wise{color:var(--gold)}
+/* The wordmark doubles as the way back to the app. It must not look like a
+   plain blue link, so it inherits the wordmark's own colours and only signals
+   itself on hover and keyboard focus. */
+.home-link{color:inherit;text-decoration:none;display:inline-block;border-radius:6px}
+.home-link:hover{text-decoration:underline;text-decoration-thickness:2px;
+  text-underline-offset:4px}
+.home-link:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 .mw-head{padding:6px 0 18px}
 .mw-head p{margin-top:4px;margin-bottom:0}
 
@@ -117,7 +124,8 @@ table.mw-table tr.total td{font-weight:600;border-top:2px solid var(--gold)}
 <body>
 <div class="wrap">
   <header class="mw-head">
-    <h1 class="wordmark">Math<span class="wise">WISE</span></h1>
+    <h1 class="wordmark"><a class="home-link" href="mathwise.html"
+      title="Back to MathWISE" aria-label="Back to MathWISE">Math<span class="wise">WISE</span></a></h1>
     <p class="muted">Staff dashboard</p>
   </header>
 

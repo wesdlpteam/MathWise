@@ -81,6 +81,8 @@ p{margin:0 0 .7rem}
   color .15s,background .15s;margin-bottom:6px}
 .stats-link:hover,.stats-link:focus-visible{opacity:1;color:var(--gold);background:var(--mist)}
 .stats-link svg{width:18px;height:18px}
+/* Welcome screen: the same link, sitting in the top right corner above the hero. */
+.stats-corner{display:flex;justify-content:flex-end;margin-bottom:-6px}
 .course-pick select{width:auto;min-width:210px;margin-top:4px}
 .badge{display:inline-block;background:var(--mist);border:1px solid var(--rule);
   border-left:3px solid var(--gold);padding:4px 9px;font-size:.82rem;color:var(--purple);border-radius:3px}
@@ -6454,8 +6456,21 @@ function startHeroRotation(){
   }, 20000);
 }
 
+// The staff link to the dashboard. One definition, used on both the welcome
+// screen and the app header, so the two can never drift apart.
+function statsLink(){
+  return `<a class="stats-link" href="stats.html" target="_blank" rel="noopener"
+    title="Staff dashboard" aria-label="Staff dashboard, opens in a new tab">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 20V4"/><path d="M3 20h18"/><path d="M7 16v-4"/>
+      <path d="M12 16V7"/><path d="M17 16v-6"/>
+    </svg></a>`;
+}
+
 function renderWelcome(){
   root.innerHTML = `
+    <div class="stats-corner">${statsLink()}</div>
     <div class="hero">
       <div>
         <div class="wordmark">Math<span class="wise">WISE</span></div>
@@ -6549,13 +6564,7 @@ function renderApp(){
           <div class="sub">${c.key ? esc(c.name) : "Wesley College Mathematics"}</div>
         </div>
         <div class="course-pick">
-          <div><a class="stats-link" href="stats.html" target="_blank" rel="noopener"
-            title="Staff dashboard" aria-label="Staff dashboard, opens in a new tab">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 20V4"/><path d="M3 20h18"/><path d="M7 16v-4"/>
-              <path d="M12 16V7"/><path d="M17 16v-6"/>
-            </svg></a></div>
+          <div>${statsLink()}</div>
           <label for="course" style="margin:0">Your course <span class="small">(optional)</span></label>
           <select id="course">
             <option value="" ${!c.key ? "selected" : ""}>${esc(COURSES[0].name)}</option>
