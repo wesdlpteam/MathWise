@@ -2010,6 +2010,73 @@ function saveLocalEvents(list){
   catch (e){ /* storage full or unavailable — logging is best-effort only */ }
 }
 
+// The open question session, or null when no question is in progress.
+let AS = null;
+let idleTimer = null;
+
+function analyticsStart(text){
+  try {
+    if (AS) analyticsEnd("switched");
+    AS = {
+      course: S.courseKey || "",
+      topic: classifyTopic(text, S.courseKey || ""),
+      startedAt: Date.now(),
+      endedAt: 0,
+      turns: 0,
+      rating: "none",
+      tokensIn: 0,
+      tokensOut: 0,
+      cost: 0,
+      askedToBeShown: false
+    };
+    analyticsTouch();
+  } catch (e){ /* analytics must never break a tutoring request */ }
+}
+
+// Any sign of life resets the twenty-minute clock. A hidden tab does NOT
+// pause it: a student who switches away and never comes back should be
+// recorded as a timeout, not left open forever.
+function analyticsTouch(){
+  try {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (!AS) return;
+    idleTimer = setTimeout(() => analyticsEnd("timeout"), IDLE_MS);
+  } catch (e){ /* best effort only */ }
+}
+
+function analyticsEnd(outcome){
+  try {
+    if (!AS) return;
+    const session = AS;
+    AS = null;                       // cleared first, so a re-entrant call is a no-op
+    if (idleTimer){ clearTimeout(idleTimer); idleTimer = null; }
+    session.endedAt = Date.now();
+    session.outcome = session.askedToBeShown && outcome === "solved" ? "shown" : outcome;
+    const record = buildRecord(session);
+    const list = loadLocalEvents();
+    list.push(Object.assign({ ts: new Date().toISOString() }, record));
+    saveLocalEvents(list);
+    queueSend(record);
+  } catch (e){ /* analytics must never break a tutoring request */ }
+}
+
+function analyticsRate(rating){
+  try {
+    if (AS){ AS.rating = rating; return; }
+    // The rating usually arrives after the solution closed the session, so
+    // amend the most recent stored record instead of dropping the answer.
+    const list = loadLocalEvents();
+    if (!list.length) return;
+    list[list.length - 1].rating = rating;
+    saveLocalEvents(list);
+    queueSend(list[list.length - 1]);
+  } catch (e){ /* best effort only */ }
+}
+
+// Replaced with a real sender further down. Declared here so the lifecycle
+// can call it and the self-check can run without a network.
+function queueSend(record){ /* wired up in the sender section */ }
+
 /* --- Expressions ----------------------------------------------------- *
  * A small shunting-yard parser. The model writes y = f(x) as a string and
  * this evaluates it, rather than the model sending hundreds of points.
@@ -6447,6 +6514,7 @@ function renderApp(){
 
   document.getElementById("course").onchange = e => { S.courseKey = e.target.value; render(); };
   document.getElementById("restart").onclick = () => {
+    analyticsEnd("switched");
     stopSpeech();
     Object.assign(S, { screen:"welcome", courseKey:"", welcomeBand:"", messages:[], draft:"", showKeys:false,
       intake:null, intakeEdit:false, showIntake:false, error:"", speechError:"", mapSpec:null,
@@ -6583,6 +6651,7 @@ function renderQuestions(el){
 
   const clear = document.getElementById("clear");
   if (clear) clear.onclick = () => {
+    analyticsEnd("switched");
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
     S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false;
     S.attemptPrompt = false; S.attemptError = "";
@@ -6628,6 +6697,7 @@ function renderQuestions(el){
   paintPreview();
   const wire = (id, fn) => { const b = document.getElementById(id); if (b) b.onclick = fn; };
   wire("another", () => {
+    analyticsEnd("switched");
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
     S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false;
     S.attemptPrompt = false; S.attemptError = "";
@@ -6636,7 +6706,10 @@ function renderQuestions(el){
   });
   wire("explain", () => submit(FOLLOW_UPS.explain, false));
   wire("simplify", () => submit(FOLLOW_UPS.simplify, false));
-  wire("justshow", () => { S.attemptPrompt = true; S.attemptError = ""; render(); });
+  wire("justshow", () => {
+    if (AS) AS.askedToBeShown = true;
+    S.attemptPrompt = true; S.attemptError = ""; render();
+  });
   ["attemptfile","attemptcam"].forEach(id => {
     const input = document.getElementById(id);
     if (input) input.onchange = e => sendAttemptPhoto(e.target.files[0]);
@@ -6712,6 +6785,10 @@ function maybeNudgeCourse(){
 
 async function submit(text, visible, shot, image, apiText){
   if (visible) maybeNudgeCourse();
+  // A visible message is the student asking something; the invisible ones are
+  // follow-ups like "explain that" within the question already open.
+  if (visible && !AS) analyticsStart(text);
+  analyticsTouch();
   stopSpeech();
   // apiText lets what's sent to Claude differ from what's shown in the
   // transcript — used to add "now give the full solution" onto a genuine
@@ -6748,7 +6825,10 @@ async function submit(text, visible, shot, image, apiText){
     const reply = await callClaude(system, payload, 4000, "tutoring");
     S.messages.push({ role:"assistant", content:reply });
     S.hintTurns += 1;
-    S.solved = S.solved || /^##\s*full solution/i.test(reply.trim());
+    const nowSolved = /^##\s*full solution/i.test(reply.trim());
+    S.solved = S.solved || nowSolved;
+    if (AS) AS.turns += 1;
+    if (nowSolved) analyticsEnd("solved");
   } catch (err){
     S.error = err.message;
     S.messages.pop();
@@ -6965,6 +7045,7 @@ function mstFinish(){
   S.messages.push({ role:"user", content: st.questionText, visible:true });
   S.messages.push({ role:"assistant", content: `## Full solution\n\nApplying ${algoName} algorithm: ${summary}` });
   S.solved = true;
+  analyticsEnd("solved");
   S.mst = null;
   render();
 }
@@ -8116,6 +8197,21 @@ function runSelfTest(){
   check("record: no course means none", buildRecord({ course:"", startedAt:0, endedAt:0 }).band, "none");
   check("record: carries no free text", Object.keys(rec).includes("text"), false);
 
+  // Lifecycle: start, count turns, end once and once only.
+  analyticsEnd("switched");                       // clear any stray open session
+  const before = loadLocalEvents().length;
+  analyticsStart("factorise x^2 + 5x + 6");
+  check("lifecycle: session opens", AS !== null, true);
+  AS.turns = 3;
+  analyticsEnd("solved");
+  const after = loadLocalEvents();
+  check("lifecycle: one record written", after.length, before + 1);
+  check("lifecycle: outcome recorded", after[after.length - 1].outcome, "solved");
+  check("lifecycle: turns recorded", after[after.length - 1].turns, 3);
+  check("lifecycle: session closed", AS, null);
+  analyticsEnd("closed");
+  check("lifecycle: second end is ignored", loadLocalEvents().length, before + 1);
+
   const pass = results.filter(r => r.pass).length;
   document.getElementById("root").innerHTML =
     `<div style="font:14px/1.6 Figtree,system-ui;padding:24px;max-width:760px">
@@ -8129,6 +8225,14 @@ function runSelfTest(){
 }
 
 /* --- Go -------------------------------------------------------------- */
+
+// A closing tab is the clearest abandonment signal there is. keepalive on the
+// send is what lets the request finish while the page tears down.
+window.addEventListener("pagehide", () => analyticsEnd("closed"));
+// Any click anywhere in the app counts as a sign of life for the idle clock.
+document.addEventListener("click", () => analyticsTouch(), true);
+window.addEventListener("focus", () => analyticsTouch());
+
 if (new URLSearchParams(location.search).get("selftest") === "1") runSelfTest();
 else render();
 </script>
