@@ -15,3 +15,11 @@ IB_MYP_*.md
 .superpowers/
 .DS_Store
 Thumbs.db
+
+# Node
+node_modules/
+
+# Vercel project link and pulled env files
+.vercel/
+.env
+.env.*
