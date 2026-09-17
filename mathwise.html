@@ -1751,11 +1751,10 @@ function parseJsonReply(raw){
 }
 
 /* --- Cost analysis ----------------------------------------------------- *
- * REMOVABLE MODULE. Before this app goes live to students, delete: this
- * whole block; the "cost" entry in TABS; the renderCostAnalysis() branch
- * in renderApp()'s tab dispatch; the logUsage() call inside callClaude();
- * and the purpose string on each callClaude() call (harmless to leave,
- * but they exist only for this).
+ * Staff-only. This no longer appears as a tab in the student app; the
+ * dashboard at stats.html renders it, reading mw_cost_log from this same
+ * origin. logUsage() still runs on every call to Claude, both for that view
+ * and to roll token and cost totals into each analytics record.
  *
  * It exists to watch how token use and cost behave during development —
  * in particular, MathWISE resends the *entire* conversation on every
@@ -6479,8 +6478,7 @@ const WELCOME_BAND_LABEL = { MYP:"MYP — Years 7 to 10", VCE:"VCE", "IB Diploma
 const TABS = [
   { key:"questions", label:"Questions" },
   { key:"skills",    label:"Study Skills" },
-  { key:"tools",     label:"Study Tools" },
-  { key:"cost",      label:"Cost Analysis" }  // REMOVABLE — see the "Cost analysis" module
+  { key:"tools",     label:"Study Tools" }
 ];
 
 function renderApp(){
@@ -6510,6 +6508,8 @@ function renderApp(){
       <div class="tabs">
         ${TABS.map(t => `<button class="tab" role="tab" aria-selected="${S.tab === t.key}" data-tab="${t.key}">${t.label}</button>`).join("")}
       </div>
+      <p class="small muted" style="margin-top:10px">MathWISE records anonymous usage to help
+        teachers improve it. No names, no questions and no photos are stored.</p>
     </div>
     <div id="body"></div>`;
 
@@ -6532,7 +6532,6 @@ function renderApp(){
   const body = document.getElementById("body");
   if (S.tab === "questions") renderQuestions(body);
   else if (S.tab === "skills") renderSkills(body);
-  else if (S.tab === "cost") renderCostAnalysis(body);  // REMOVABLE — see the "Cost analysis" module
   else renderTools(body);
 
   if (S.copyText){
