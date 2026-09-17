@@ -1,0 +1,15 @@
+# Vercel uploads the working directory, not just what git tracks. These must
+# never be sent: textbooks and calculator guidebooks are copyright and total
+# about 345MB, and the IB subject guides are IB copyright.
+*.pdf
+IBDP_*.md
+IB_MYP_*.md
+
+# Not needed to run the endpoints
+node_modules/
+docs/
+.superpowers/
+test/
+ACv9_Mathematics_Years7-10.md
+CLAUDE.md
+*.bundle

@@ -2077,7 +2077,7 @@ function analyticsRate(rating){
 // a local file there is no server to talk to, so sending is off and records
 // simply stay in this browser. That also keeps the self-check offline.
 const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1"
-  || location.protocol === "file:") ? "" : "https://mathwise.vercel.app";
+  || location.protocol === "file:") ? "" : "https://mathwise-xi.vercel.app";
 
 function loadOutbox(){
   try { return JSON.parse(localStorage.getItem("mw_outbox") || "[]"); }
