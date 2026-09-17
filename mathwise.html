@@ -1649,6 +1649,7 @@ const S = {
   messages: [],
   hintTurns: 0,
   solved: false,
+  rated: false,
   attemptPrompt: false,
   attemptError: "",
   busy: false,
@@ -6519,7 +6520,7 @@ function renderApp(){
     Object.assign(S, { screen:"welcome", courseKey:"", welcomeBand:"", messages:[], draft:"", showKeys:false,
       intake:null, intakeEdit:false, showIntake:false, error:"", speechError:"", mapSpec:null,
       fbItems:[], fbError:"", ctPlan:"", copyText:"", copyTitle:"",
-      hintTurns:0, solved:false, attemptPrompt:false, attemptError:"",
+      hintTurns:0, solved:false, rated:false, attemptPrompt:false, attemptError:"",
       calcBusy:false, calcError:"", studySummary:null, studySummaryBusy:false, studySummaryError:"",
       mst:null,
       costSession: newCostSession(), costViewSession:"" });  // REMOVABLE — see the "Cost analysis" module
@@ -6611,6 +6612,15 @@ function renderQuestions(el){
         <button class="btn-quiet" id="save">Copy as text</button>
         <button class="btn-quiet" id="another">Ask another question</button>
       </div>` : ""}
+
+    ${S.solved && !S.rated ? `<div class="mw-rate" style="margin-top:14px;display:flex;
+      align-items:center;gap:10px;flex-wrap:wrap;font-size:0.95rem">
+      <span>Did this help?</span>
+      <button class="btn-quiet" id="rateup" aria-label="Yes, this helped">Yes</button>
+      <button class="btn-quiet" id="ratedown" aria-label="No, this did not help">Not really</button>
+    </div>` : ""}
+    ${S.solved && S.rated ? `<p class="muted" style="margin-top:14px">Thanks, that helps us improve MathWISE.</p>` : ""}
+
     ${!SPEECH_OK && canFollowUp ? '<p class="small">This browser cannot read answers aloud. Chrome, Edge and Safari can.</p>' : ""}
     ${S.speechError ? `<p class="err">${esc(S.speechError)}</p>` : ""}
     ${S.calcError ? `<p class="err">${esc(S.calcError)}</p>` : ""}
@@ -6653,7 +6663,7 @@ function renderQuestions(el){
   if (clear) clear.onclick = () => {
     analyticsEnd("switched");
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
-    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false;
+    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false; S.rated = false;
     S.attemptPrompt = false; S.attemptError = "";
     S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = ""; render();
   };
@@ -6699,7 +6709,7 @@ function renderQuestions(el){
   wire("another", () => {
     analyticsEnd("switched");
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
-    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false;
+    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false; S.rated = false;
     S.attemptPrompt = false; S.attemptError = "";
     S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = "";
     render(); backToAsk();
@@ -6710,6 +6720,8 @@ function renderQuestions(el){
     if (AS) AS.askedToBeShown = true;
     S.attemptPrompt = true; S.attemptError = ""; render();
   });
+  wire("rateup", () => { analyticsRate("up"); S.rated = true; render(); });
+  wire("ratedown", () => { analyticsRate("down"); S.rated = true; render(); });
   ["attemptfile","attemptcam"].forEach(id => {
     const input = document.getElementById(id);
     if (input) input.onchange = e => sendAttemptPhoto(e.target.files[0]);
