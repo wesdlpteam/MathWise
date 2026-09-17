@@ -23,14 +23,23 @@ const MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS_CEILING = 4000;
 
 // A long Socratic conversation genuinely grows, and the app resends the whole
-// history every turn, so this is deliberately generous. It exists to stop a
-// caller pasting thousands of messages in one request, not to limit real use.
-const MAX_MESSAGES = 80;
+// history every turn, so this is deliberately far above any real session. It
+// exists to stop a caller pasting thousands of messages into one request, not
+// to put a ceiling on how long a student can work at a problem.
+const MAX_MESSAGES = 400;
 
-// Roughly 4MB of JSON. Vercel refuses a larger body anyway; this returns a clear
-// message instead of an opaque platform error. Photographed questions are the
-// only thing that comes close, which is why the app caps an upload at 3MB.
+// Roughly 4MB of JSON, which is about where Vercel refuses a body anyway; this
+// returns a clear message instead of an opaque platform error. The app shrinks
+// every photo in the browser before sending, so a real request lands nowhere
+// near this and there is no size limit on what a student can photograph.
 const MAX_BODY_CHARS = 4_000_000;
+
+// Rate limiting counts per internet address, and a whole school usually shares
+// one. A class of thirty working at once is a perfectly normal burst from a
+// single address, so this has to be far above one person's pace or it would
+// start refusing students mid-lesson. It is here to stop a script in a loop,
+// which looks nothing like a classroom.
+const REQUESTS_PER_MINUTE = 600;
 
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -38,8 +47,7 @@ export default async function handler(req, res) {
   // Open by default, exactly like Springboard: set STUDENT_PASSCODE on the
   // project to require one, leave it unset to let anyone with the link use it.
   if (!requireStudent(req, res)) return;
-  // A tutoring turn plus its follow-ups is a handful of calls a minute at most.
-  if (!rateLimit(req, res, { max: 30, windowMs: 60000, name: "claude" })) return;
+  if (!rateLimit(req, res, { max: REQUESTS_PER_MINUTE, windowMs: 60000, name: "claude" })) return;
 
   const body = req.body || {};
   const { system, messages, max_tokens } = body;

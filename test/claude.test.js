@@ -40,8 +40,18 @@ test("rejects a request with no messages", async () => {
   assert.equal(res.statusCode, 400);
 });
 
+test("a long tutoring session is not cut short", async () => {
+  // Thirty turns of back and forth is a big session, and must still go through:
+  // the message cap is there for abuse, not to limit how long a student works.
+  stubUpstream();
+  const body = { messages: Array.from({ length: 60 }, () => ({ role: "user", content: "x" })) };
+  const { req, res } = mockReqRes({ body });
+  await handler(req, res);
+  assert.equal(res.statusCode, 200);
+});
+
 test("rejects an implausible pile of messages", async () => {
-  const body = { messages: Array.from({ length: 200 }, () => ({ role: "user", content: "x" })) };
+  const body = { messages: Array.from({ length: 900 }, () => ({ role: "user", content: "x" })) };
   const { req, res } = mockReqRes({ body });
   await handler(req, res);
   assert.equal(res.statusCode, 400);
