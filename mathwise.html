@@ -1912,6 +1912,104 @@ function renderCostAnalysis(el){
   };
 }
 
+/* --- Analytics -------------------------------------------------------- *
+ * One anonymous record per question a student works on. What leaves this
+ * device is a set of category labels and numbers: course, band, topic,
+ * outcome, turns, seconds, rating, tokens, cost. Never the question text,
+ * never a photo, never a name. The server re-checks every value against
+ * its own allow-list, so this file is the convenience, not the control.
+ *
+ * Every entry point is wrapped so that an analytics fault can never break
+ * a tutoring request, exactly as logUsage() already behaves.
+ * ------------------------------------------------------------------ */
+
+const IDLE_MS = 20 * 60 * 1000;   // 20 minutes with no interaction ends a session
+
+// Courses whose TOPICS list is empty (the three IB Diploma courses) fall back
+// to this. Order matters: the first match wins, so the specific phrases sit
+// above the general ones.
+const TOPIC_KEYWORDS = [
+  ["Calculus", ["differentiate", "derivative", "integral", "integrate", "dy/dx", "antiderivative", "limit"]],
+  ["Statistics and probability", ["probability", "normal distribution", "standard deviation", "binomial", "median", "quartile", "box plot", "histogram"]],
+  ["Trigonometry", ["sine", "cosine", "tangent", "sin(", "cos(", "tan(", "bearing", "radian"]],
+  ["Linear relationships", ["gradient", "y-intercept", "straight line", "y = mx", "simultaneous"]],
+  ["Quadratics", ["quadratic", "parabola", "factorise", "discriminant", "complete the square"]],
+  ["Geometry and measurement", ["area", "perimeter", "volume", "surface area", "pythagoras", "congruent", "similar"]],
+  ["Number and algebra", ["simplify", "expand", "solve for", "index", "indices", "surd", "fraction", "percentage"]],
+  ["Financial mathematics", ["interest", "loan", "depreciation", "annuity", "investment"]],
+  ["Networks and matrices", ["matrix", "matrices", "network", "vertex", "spanning tree", "shortest path"]]
+];
+
+function deviceId(){
+  try {
+    let id = localStorage.getItem("mw_device");
+    if (!id){
+      const rnd = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2);
+      id = rnd.replace(/-/g, "").slice(0, 8);
+      localStorage.setItem("mw_device", id);
+    }
+    return id;
+  } catch (e){ return "nostore"; }
+}
+
+// Matches the question against this course's own topic list first, because
+// those are the words the student's teacher actually uses. Falls back to the
+// shared keyword map, which is the only option for the IB courses since
+// TOPICS has no entries for them.
+function classifyTopic(text, courseKey){
+  const t = String(text || "").toLowerCase();
+  if (!t.trim()) return "Unclassified";
+
+  const key = courseKey || "";
+  const listed = (topicsFor(key) || []).concat(key.indexOf("myp10") === 0 ? Y10_CORE : []);
+  let best = "", bestScore = 0;
+  listed.forEach(topic => {
+    // Score a topic by how many of its own significant words appear in the
+    // question. "Expanding and factorising quadratics" matches on both
+    // "factorise" and "quadratic" and so beats a single-word coincidence.
+    const words = topic.toLowerCase().split(/[^a-z]+/).filter(w => w.length > 4);
+    const score = words.filter(w => t.indexOf(w.replace(/(ing|ies|es|s)$/, "")) !== -1).length;
+    if (score > bestScore){ bestScore = score; best = topic; }
+  });
+  if (bestScore > 0) return best;
+
+  for (const pair of TOPIC_KEYWORDS){
+    if (pair[1].some(k => t.indexOf(k) !== -1)) return pair[0];
+  }
+  return "Unclassified";
+}
+
+function buildRecord(session){
+  const s = session || {};
+  const course = s.course || "";
+  const band = course ? (courseOf(course).band || "none") : "none";
+  const started = Number(s.startedAt) || 0;
+  const ended = Number(s.endedAt) || 0;
+  return {
+    device: deviceId(),
+    course: course || "none",
+    band: band || "none",
+    topic: s.topic || "Unclassified",
+    outcome: s.outcome || "switched",
+    turns: Number(s.turns) || 0,
+    seconds: Math.max(0, Math.round((ended - started) / 1000)),
+    rating: s.rating || "none",
+    tokensIn: Number(s.tokensIn) || 0,
+    tokensOut: Number(s.tokensOut) || 0,
+    cost: Number(s.cost) || 0
+  };
+}
+
+function loadLocalEvents(){
+  try { return JSON.parse(localStorage.getItem("mw_events") || "[]"); }
+  catch (e){ return []; }
+}
+
+function saveLocalEvents(list){
+  try { localStorage.setItem("mw_events", JSON.stringify(list.slice(-2000))); }
+  catch (e){ /* storage full or unavailable — logging is best-effort only */ }
+}
+
 /* --- Expressions ----------------------------------------------------- *
  * A small shunting-yard parser. The model writes y = f(x) as a string and
  * this evaluates it, rather than the model sending hundreds of points.
@@ -7980,8 +8078,59 @@ function printReflection(){
 
 function copyReflection(){ offerCopy("Your Colour Therapy reflection", reflectionText()); }
 
+/* --- Self-check ------------------------------------------------------- *
+ * Runs only with ?selftest=1 in the address. Pure functions only: no
+ * network. Prints a pass/fail list into the page instead of rendering the
+ * app. This is the only automated coverage the browser code has, so run it
+ * after every change in here.
+ * ------------------------------------------------------------------ */
+
+function runSelfTest(){
+  const results = [];
+  const check = (name, actual, expected) => {
+    const pass = JSON.stringify(actual) === JSON.stringify(expected);
+    results.push({ name, pass, actual, expected });
+  };
+
+  check("classify: quadratic question in Year 10 Standard",
+    classifyTopic("How do I factorise x^2 + 5x + 6?", "myp10s"),
+    "Expanding and factorising quadratics");
+  check("classify: gradient question falls to the keyword map",
+    classifyTopic("what is the gradient of this line", "aa_sl"),
+    "Linear relationships");
+  check("classify: nonsense is Unclassified",
+    classifyTopic("zzzz qqqq", "myp7"),
+    "Unclassified");
+  check("classify: empty text is Unclassified",
+    classifyTopic("", "myp7"),
+    "Unclassified");
+
+  const rec = buildRecord({
+    course: "gen34", startedAt: 1000, endedAt: 121000, turns: 4,
+    outcome: "solved", rating: "up", tokensIn: 120, tokensOut: 340, cost: 0.0123,
+    topic: "Matrices"
+  });
+  check("record: band derived from course", rec.band, "VCE");
+  check("record: seconds from timestamps", rec.seconds, 120);
+  check("record: outcome carried", rec.outcome, "solved");
+  check("record: no course means none", buildRecord({ course:"", startedAt:0, endedAt:0 }).band, "none");
+  check("record: carries no free text", Object.keys(rec).includes("text"), false);
+
+  const pass = results.filter(r => r.pass).length;
+  document.getElementById("root").innerHTML =
+    `<div style="font:14px/1.6 Figtree,system-ui;padding:24px;max-width:760px">
+      <h2>MathWISE self-check</h2>
+      <p><strong>${pass} of ${results.length} passed.</strong></p>
+      <ul>${results.map(r => `<li style="color:${r.pass ? "#2b7a3f" : "#b3261e"}">
+        ${r.pass ? "PASS" : "FAIL"} - ${esc(r.name)}
+        ${r.pass ? "" : `<br><small>got ${esc(JSON.stringify(r.actual))},
+          expected ${esc(JSON.stringify(r.expected))}</small>`}</li>`).join("")}</ul>
+    </div>`;
+}
+
 /* --- Go -------------------------------------------------------------- */
-render();
+if (new URLSearchParams(location.search).get("selftest") === "1") runSelfTest();
+else render();
 </script>
 </body>
 </html>
