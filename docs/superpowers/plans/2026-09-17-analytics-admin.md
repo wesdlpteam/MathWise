@@ -1782,13 +1782,19 @@ Expected: `.vercel/project.json` is written. Add `.vercel` and `node_modules` to
 
 Two values, neither of which may be written into any file in this repository.
 
-`DATABASE_URL` is copied from the Springboard project. Pull it into the session's scratchpad directory, never the repo, pipe it straight in, and delete the file immediately:
+`DATABASE_URL` cannot be copied from the command line. This was tried and it does not
+work: `vercel env pull` writes sensitive values as the literal text `[SENSITIVE]`, by
+design, so the copy silently sets a junk value. Vercel deliberately makes a secret
+write-only once stored, which is the correct behaviour and worth knowing.
 
-```bash
-vercel env pull --environment=production "$SCRATCH/sb.env" --cwd "../../Springboard"
-grep '^DATABASE_URL=' "$SCRATCH/sb.env" | cut -d= -f2- | vercel env add DATABASE_URL production
-rm -f "$SCRATCH/sb.env"
-```
+The working route is the dashboard, and it takes about a minute:
+
+1. Open the mathwise project on vercel.com, Storage tab.
+2. Choose "Connect Database", pick the existing Neon database that Springboard uses.
+3. Vercel sets `DATABASE_URL` on this project itself. Nothing is typed or pasted.
+
+Connecting an existing database does not copy or move any data; both projects then
+point at the same Neon instance, each using its own tables.
 
 `ADMIN_PASSWORD` is typed at the prompt by Nathan, so it never appears in a command, a history file or this plan:
 

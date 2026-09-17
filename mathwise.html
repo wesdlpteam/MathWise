@@ -1649,6 +1649,7 @@ const S = {
   messages: [],
   hintTurns: 0,
   solved: false,
+  rated: false,
   attemptPrompt: false,
   attemptError: "",
   busy: false,
@@ -1750,11 +1751,10 @@ function parseJsonReply(raw){
 }
 
 /* --- Cost analysis ----------------------------------------------------- *
- * REMOVABLE MODULE. Before this app goes live to students, delete: this
- * whole block; the "cost" entry in TABS; the renderCostAnalysis() branch
- * in renderApp()'s tab dispatch; the logUsage() call inside callClaude();
- * and the purpose string on each callClaude() call (harmless to leave,
- * but they exist only for this).
+ * Staff-only. This no longer appears as a tab in the student app; the
+ * dashboard at stats.html renders it, reading mw_cost_log from this same
+ * origin. logUsage() still runs on every call to Claude, both for that view
+ * and to roll token and cost totals into each analytics record.
  *
  * It exists to watch how token use and cost behave during development —
  * in particular, MathWISE resends the *entire* conversation on every
@@ -1910,6 +1910,219 @@ function renderCostAnalysis(el){
     saveCostLog([]);
     render();
   };
+}
+
+/* --- Analytics -------------------------------------------------------- *
+ * One anonymous record per question a student works on. What leaves this
+ * device is a set of category labels and numbers: course, band, topic,
+ * outcome, turns, seconds, rating, tokens, cost. Never the question text,
+ * never a photo, never a name. The server re-checks every value against
+ * its own allow-list, so this file is the convenience, not the control.
+ *
+ * Every entry point is wrapped so that an analytics fault can never break
+ * a tutoring request, exactly as logUsage() already behaves.
+ * ------------------------------------------------------------------ */
+
+const IDLE_MS = 20 * 60 * 1000;   // 20 minutes with no interaction ends a session
+
+// Courses whose TOPICS list is empty (the three IB Diploma courses) fall back
+// to this. Order matters: the first match wins, so the specific phrases sit
+// above the general ones.
+const TOPIC_KEYWORDS = [
+  ["Calculus", ["differentiate", "derivative", "integral", "integrate", "dy/dx", "antiderivative", "limit"]],
+  ["Statistics and probability", ["probability", "normal distribution", "standard deviation", "binomial", "median", "quartile", "box plot", "histogram"]],
+  ["Trigonometry", ["sine", "cosine", "tangent", "sin(", "cos(", "tan(", "bearing", "radian"]],
+  ["Linear relationships", ["gradient", "y-intercept", "straight line", "y = mx", "simultaneous"]],
+  ["Quadratics", ["quadratic", "parabola", "factorise", "discriminant", "complete the square"]],
+  ["Geometry and measurement", ["area", "perimeter", "volume", "surface area", "pythagoras", "congruent", "similar"]],
+  ["Number and algebra", ["simplify", "expand", "solve for", "index", "indices", "surd", "fraction", "percentage"]],
+  ["Financial mathematics", ["interest", "loan", "depreciation", "annuity", "investment"]],
+  ["Networks and matrices", ["matrix", "matrices", "network", "vertex", "spanning tree", "shortest path"]]
+];
+
+function deviceId(){
+  try {
+    let id = localStorage.getItem("mw_device");
+    if (!id){
+      const rnd = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2);
+      id = rnd.replace(/-/g, "").slice(0, 8);
+      localStorage.setItem("mw_device", id);
+    }
+    return id;
+  } catch (e){ return "nostore"; }
+}
+
+// Matches the question against this course's own topic list first, because
+// those are the words the student's teacher actually uses. Falls back to the
+// shared keyword map, which is the only option for the IB courses since
+// TOPICS has no entries for them.
+function classifyTopic(text, courseKey){
+  const t = String(text || "").toLowerCase();
+  if (!t.trim()) return "Unclassified";
+
+  const key = courseKey || "";
+  const listed = (topicsFor(key) || []).concat(key.indexOf("myp10") === 0 ? Y10_CORE : []);
+  let best = "", bestScore = 0;
+  listed.forEach(topic => {
+    // Score a topic by how many of its own significant words appear in the
+    // question. "Expanding and factorising quadratics" matches on both
+    // "factorise" and "quadratic" and so beats a single-word coincidence.
+    const words = topic.toLowerCase().split(/[^a-z]+/).filter(w => w.length > 4);
+    const score = words.filter(w => t.indexOf(w.replace(/(ing|ies|es|s)$/, "")) !== -1).length;
+    if (score > bestScore){ bestScore = score; best = topic; }
+  });
+  if (bestScore > 0) return best;
+
+  for (const pair of TOPIC_KEYWORDS){
+    if (pair[1].some(k => t.indexOf(k) !== -1)) return pair[0];
+  }
+  return "Unclassified";
+}
+
+function buildRecord(session){
+  const s = session || {};
+  const course = s.course || "";
+  const band = course ? (courseOf(course).band || "none") : "none";
+  const started = Number(s.startedAt) || 0;
+  const ended = Number(s.endedAt) || 0;
+  return {
+    device: deviceId(),
+    course: course || "none",
+    band: band || "none",
+    topic: s.topic || "Unclassified",
+    outcome: s.outcome || "switched",
+    turns: Number(s.turns) || 0,
+    seconds: Math.max(0, Math.round((ended - started) / 1000)),
+    rating: s.rating || "none",
+    tokensIn: Number(s.tokensIn) || 0,
+    tokensOut: Number(s.tokensOut) || 0,
+    cost: Number(s.cost) || 0
+  };
+}
+
+function loadLocalEvents(){
+  try { return JSON.parse(localStorage.getItem("mw_events") || "[]"); }
+  catch (e){ return []; }
+}
+
+function saveLocalEvents(list){
+  try { localStorage.setItem("mw_events", JSON.stringify(list.slice(-2000))); }
+  catch (e){ /* storage full or unavailable — logging is best-effort only */ }
+}
+
+// The open question session, or null when no question is in progress.
+let AS = null;
+let idleTimer = null;
+
+function analyticsStart(text){
+  try {
+    if (AS) analyticsEnd("switched");
+    AS = {
+      course: S.courseKey || "",
+      topic: classifyTopic(text, S.courseKey || ""),
+      startedAt: Date.now(),
+      endedAt: 0,
+      turns: 0,
+      rating: "none",
+      tokensIn: 0,
+      tokensOut: 0,
+      cost: 0,
+      askedToBeShown: false
+    };
+    analyticsTouch();
+  } catch (e){ /* analytics must never break a tutoring request */ }
+}
+
+// Any sign of life resets the twenty-minute clock. A hidden tab does NOT
+// pause it: a student who switches away and never comes back should be
+// recorded as a timeout, not left open forever.
+function analyticsTouch(){
+  try {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (!AS) return;
+    idleTimer = setTimeout(() => analyticsEnd("timeout"), IDLE_MS);
+  } catch (e){ /* best effort only */ }
+}
+
+function analyticsEnd(outcome){
+  try {
+    if (!AS) return;
+    const session = AS;
+    AS = null;                       // cleared first, so a re-entrant call is a no-op
+    if (idleTimer){ clearTimeout(idleTimer); idleTimer = null; }
+    session.endedAt = Date.now();
+    session.outcome = session.askedToBeShown && outcome === "solved" ? "shown" : outcome;
+    const record = buildRecord(session);
+    const list = loadLocalEvents();
+    list.push(Object.assign({ ts: new Date().toISOString() }, record));
+    saveLocalEvents(list);
+    queueSend(record);
+  } catch (e){ /* analytics must never break a tutoring request */ }
+}
+
+function analyticsRate(rating){
+  try {
+    if (AS){ AS.rating = rating; return; }
+    // The rating usually arrives after the solution closed the session, so
+    // amend the most recent stored record instead of dropping the answer.
+    const list = loadLocalEvents();
+    if (!list.length) return;
+    list[list.length - 1].rating = rating;
+    saveLocalEvents(list);
+    queueSend(list[list.length - 1]);
+  } catch (e){ /* best effort only */ }
+}
+
+// The app is served from GitHub Pages; the endpoints live on Vercel. Opened as
+// a local file there is no server to talk to, so sending is off and records
+// simply stay in this browser. That also keeps the self-check offline.
+const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1"
+  || location.protocol === "file:") ? "" : "https://mathwise-xi.vercel.app";
+
+function loadOutbox(){
+  try { return JSON.parse(localStorage.getItem("mw_outbox") || "[]"); }
+  catch (e){ return []; }
+}
+
+function saveOutbox(list){
+  try { localStorage.setItem("mw_outbox", JSON.stringify(list.slice(-200))); }
+  catch (e){ /* best effort only */ }
+}
+
+function queueSend(record){
+  try {
+    if (!API_BASE) return;
+    const box = loadOutbox();
+    box.push(record);
+    saveOutbox(box);
+    flushOutbox();
+  } catch (e){ /* analytics must never break a tutoring request */ }
+}
+
+// Sends the queue and keeps whatever did not get through, so a dropped
+// connection or a closed laptop loses nothing. keepalive lets a send started
+// by a closing tab finish after the page has gone.
+function flushOutbox(){
+  try {
+    if (!API_BASE) return;
+    const box = loadOutbox();
+    if (!box.length) return;
+    saveOutbox([]);                    // taken out first, put back on failure
+    box.forEach(record => {
+      fetch(API_BASE + "/api/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+        keepalive: true
+      }).then(res => {
+        if (!res.ok) throw new Error("rejected");
+      }).catch(() => {
+        const back = loadOutbox();
+        back.push(record);
+        saveOutbox(back);
+      });
+    });
+  } catch (e){ /* best effort only */ }
 }
 
 /* --- Expressions ----------------------------------------------------- *
@@ -6313,8 +6526,7 @@ const WELCOME_BAND_LABEL = { MYP:"MYP — Years 7 to 10", VCE:"VCE", "IB Diploma
 const TABS = [
   { key:"questions", label:"Questions" },
   { key:"skills",    label:"Study Skills" },
-  { key:"tools",     label:"Study Tools" },
-  { key:"cost",      label:"Cost Analysis" }  // REMOVABLE — see the "Cost analysis" module
+  { key:"tools",     label:"Study Tools" }
 ];
 
 function renderApp(){
@@ -6344,16 +6556,19 @@ function renderApp(){
       <div class="tabs">
         ${TABS.map(t => `<button class="tab" role="tab" aria-selected="${S.tab === t.key}" data-tab="${t.key}">${t.label}</button>`).join("")}
       </div>
+      <p class="small muted" style="margin-top:10px">MathWISE records anonymous usage to help
+        teachers improve it. No names, no questions and no photos are stored.</p>
     </div>
     <div id="body"></div>`;
 
   document.getElementById("course").onchange = e => { S.courseKey = e.target.value; render(); };
   document.getElementById("restart").onclick = () => {
+    analyticsEnd("switched");
     stopSpeech();
     Object.assign(S, { screen:"welcome", courseKey:"", welcomeBand:"", messages:[], draft:"", showKeys:false,
       intake:null, intakeEdit:false, showIntake:false, error:"", speechError:"", mapSpec:null,
       fbItems:[], fbError:"", ctPlan:"", copyText:"", copyTitle:"",
-      hintTurns:0, solved:false, attemptPrompt:false, attemptError:"",
+      hintTurns:0, solved:false, rated:false, attemptPrompt:false, attemptError:"",
       calcBusy:false, calcError:"", studySummary:null, studySummaryBusy:false, studySummaryError:"",
       mst:null,
       costSession: newCostSession(), costViewSession:"" });  // REMOVABLE — see the "Cost analysis" module
@@ -6365,7 +6580,6 @@ function renderApp(){
   const body = document.getElementById("body");
   if (S.tab === "questions") renderQuestions(body);
   else if (S.tab === "skills") renderSkills(body);
-  else if (S.tab === "cost") renderCostAnalysis(body);  // REMOVABLE — see the "Cost analysis" module
   else renderTools(body);
 
   if (S.copyText){
@@ -6445,6 +6659,15 @@ function renderQuestions(el){
         <button class="btn-quiet" id="save">Copy as text</button>
         <button class="btn-quiet" id="another">Ask another question</button>
       </div>` : ""}
+
+    ${S.solved && !S.rated ? `<div class="mw-rate" style="margin-top:14px;display:flex;
+      align-items:center;gap:10px;flex-wrap:wrap;font-size:0.95rem">
+      <span>Did this help?</span>
+      <button class="btn-quiet" id="rateup" aria-label="Yes, this helped">Yes</button>
+      <button class="btn-quiet" id="ratedown" aria-label="No, this did not help">Not really</button>
+    </div>` : ""}
+    ${S.solved && S.rated ? `<p class="muted" style="margin-top:14px">Thanks, that helps us improve MathWISE.</p>` : ""}
+
     ${!SPEECH_OK && canFollowUp ? '<p class="small">This browser cannot read answers aloud. Chrome, Edge and Safari can.</p>' : ""}
     ${S.speechError ? `<p class="err">${esc(S.speechError)}</p>` : ""}
     ${S.calcError ? `<p class="err">${esc(S.calcError)}</p>` : ""}
@@ -6485,8 +6708,9 @@ function renderQuestions(el){
 
   const clear = document.getElementById("clear");
   if (clear) clear.onclick = () => {
+    analyticsEnd("switched");
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
-    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false;
+    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false; S.rated = false;
     S.attemptPrompt = false; S.attemptError = "";
     S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = ""; render();
   };
@@ -6530,15 +6754,21 @@ function renderQuestions(el){
   paintPreview();
   const wire = (id, fn) => { const b = document.getElementById(id); if (b) b.onclick = fn; };
   wire("another", () => {
+    analyticsEnd("switched");
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
-    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false;
+    S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false; S.rated = false;
     S.attemptPrompt = false; S.attemptError = "";
     S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = "";
     render(); backToAsk();
   });
   wire("explain", () => submit(FOLLOW_UPS.explain, false));
   wire("simplify", () => submit(FOLLOW_UPS.simplify, false));
-  wire("justshow", () => { S.attemptPrompt = true; S.attemptError = ""; render(); });
+  wire("justshow", () => {
+    if (AS) AS.askedToBeShown = true;
+    S.attemptPrompt = true; S.attemptError = ""; render();
+  });
+  wire("rateup", () => { analyticsRate("up"); S.rated = true; render(); });
+  wire("ratedown", () => { analyticsRate("down"); S.rated = true; render(); });
   ["attemptfile","attemptcam"].forEach(id => {
     const input = document.getElementById(id);
     if (input) input.onchange = e => sendAttemptPhoto(e.target.files[0]);
@@ -6614,6 +6844,10 @@ function maybeNudgeCourse(){
 
 async function submit(text, visible, shot, image, apiText){
   if (visible) maybeNudgeCourse();
+  // A visible message is the student asking something; the invisible ones are
+  // follow-ups like "explain that" within the question already open.
+  if (visible && !AS) analyticsStart(text);
+  analyticsTouch();
   stopSpeech();
   // apiText lets what's sent to Claude differ from what's shown in the
   // transcript — used to add "now give the full solution" onto a genuine
@@ -6650,7 +6884,10 @@ async function submit(text, visible, shot, image, apiText){
     const reply = await callClaude(system, payload, 4000, "tutoring");
     S.messages.push({ role:"assistant", content:reply });
     S.hintTurns += 1;
-    S.solved = S.solved || /^##\s*full solution/i.test(reply.trim());
+    const nowSolved = /^##\s*full solution/i.test(reply.trim());
+    S.solved = S.solved || nowSolved;
+    if (AS) AS.turns += 1;
+    if (nowSolved) analyticsEnd("solved");
   } catch (err){
     S.error = err.message;
     S.messages.pop();
@@ -6867,6 +7104,7 @@ function mstFinish(){
   S.messages.push({ role:"user", content: st.questionText, visible:true });
   S.messages.push({ role:"assistant", content: `## Full solution\n\nApplying ${algoName} algorithm: ${summary}` });
   S.solved = true;
+  analyticsEnd("solved");
   S.mst = null;
   render();
 }
@@ -7980,8 +8218,84 @@ function printReflection(){
 
 function copyReflection(){ offerCopy("Your Colour Therapy reflection", reflectionText()); }
 
+/* --- Self-check ------------------------------------------------------- *
+ * Runs only with ?selftest=1 in the address. Pure functions only: no
+ * network. Prints a pass/fail list into the page instead of rendering the
+ * app. This is the only automated coverage the browser code has, so run it
+ * after every change in here.
+ * ------------------------------------------------------------------ */
+
+function runSelfTest(){
+  const results = [];
+  const check = (name, actual, expected) => {
+    const pass = JSON.stringify(actual) === JSON.stringify(expected);
+    results.push({ name, pass, actual, expected });
+  };
+
+  check("classify: quadratic question in Year 10 Standard",
+    classifyTopic("How do I factorise x^2 + 5x + 6?", "myp10s"),
+    "Expanding and factorising quadratics");
+  check("classify: gradient question falls to the keyword map",
+    classifyTopic("what is the gradient of this line", "aa_sl"),
+    "Linear relationships");
+  check("classify: nonsense is Unclassified",
+    classifyTopic("zzzz qqqq", "myp7"),
+    "Unclassified");
+  check("classify: empty text is Unclassified",
+    classifyTopic("", "myp7"),
+    "Unclassified");
+
+  const rec = buildRecord({
+    course: "gen34", startedAt: 1000, endedAt: 121000, turns: 4,
+    outcome: "solved", rating: "up", tokensIn: 120, tokensOut: 340, cost: 0.0123,
+    topic: "Matrices"
+  });
+  check("record: band derived from course", rec.band, "VCE");
+  check("record: seconds from timestamps", rec.seconds, 120);
+  check("record: outcome carried", rec.outcome, "solved");
+  check("record: no course means none", buildRecord({ course:"", startedAt:0, endedAt:0 }).band, "none");
+  check("record: carries no free text", Object.keys(rec).includes("text"), false);
+
+  // Lifecycle: start, count turns, end once and once only.
+  analyticsEnd("switched");                       // clear any stray open session
+  const before = loadLocalEvents().length;
+  analyticsStart("factorise x^2 + 5x + 6");
+  check("lifecycle: session opens", AS !== null, true);
+  AS.turns = 3;
+  analyticsEnd("solved");
+  const after = loadLocalEvents();
+  check("lifecycle: one record written", after.length, before + 1);
+  check("lifecycle: outcome recorded", after[after.length - 1].outcome, "solved");
+  check("lifecycle: turns recorded", after[after.length - 1].turns, 3);
+  check("lifecycle: session closed", AS, null);
+  analyticsEnd("closed");
+  check("lifecycle: second end is ignored", loadLocalEvents().length, before + 1);
+
+  const pass = results.filter(r => r.pass).length;
+  document.getElementById("root").innerHTML =
+    `<div style="font:14px/1.6 Figtree,system-ui;padding:24px;max-width:760px">
+      <h2>MathWISE self-check</h2>
+      <p><strong>${pass} of ${results.length} passed.</strong></p>
+      <ul>${results.map(r => `<li style="color:${r.pass ? "#2b7a3f" : "#b3261e"}">
+        ${r.pass ? "PASS" : "FAIL"} - ${esc(r.name)}
+        ${r.pass ? "" : `<br><small>got ${esc(JSON.stringify(r.actual))},
+          expected ${esc(JSON.stringify(r.expected))}</small>`}</li>`).join("")}</ul>
+    </div>`;
+}
+
 /* --- Go -------------------------------------------------------------- */
-render();
+
+// A closing tab is the clearest abandonment signal there is. keepalive on the
+// send is what lets the request finish while the page tears down.
+window.addEventListener("pagehide", () => analyticsEnd("closed"));
+// Any click anywhere in the app counts as a sign of life for the idle clock.
+document.addEventListener("click", () => analyticsTouch(), true);
+window.addEventListener("focus", () => analyticsTouch());
+// Anything stranded by a closed laptop or a dropped connection goes now.
+flushOutbox();
+
+if (new URLSearchParams(location.search).get("selftest") === "1") runSelfTest();
+else render();
 </script>
 </body>
 </html>
