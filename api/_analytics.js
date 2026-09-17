@@ -18,14 +18,47 @@ export const CATEGORIES = {
   "band": ["MYP", "VCE", "IB Diploma", "none"],
   "outcome": ["solved", "shown", "switched", "closed", "timeout"],
   "rating": ["up", "down", "none"],
-  // Topic is the one list that grows with the app. It is still a list: the
-  // browser only ever sends a label it matched from TOPICS, Y10_CORE or the
-  // shared keyword map, and anything else lands as "Other".
+  // Every topic label the app can produce: the TOPICS lists, Y10_CORE, and the
+  // labels in the shared keyword map, generated from mathwise.html. The browser
+  // never sends anything else, so an exact match is the whole test and no
+  // sentence, name or pasted question can pass itself off as a topic.
+  //
+  // When a topic is added to mathwise.html, add it here too. A missing entry is
+  // not a leak, it just lands in "Other" and shows up as a gap in the chart.
   "topic": [
     "Unclassified",
-    "Calculus", "Statistics and probability", "Trigonometry",
-    "Linear relationships", "Quadratics", "Geometry and measurement",
-    "Number and algebra", "Financial mathematics", "Networks and matrices"
+    "Algebra and structure", "Algebra, number and structure", "Algebraic expressions",
+    "Angles and parallel lines", "Area and perimeter",
+    "Area and volume of prisms and cylinders", "Arithmetic and number",
+    "Bivariate data and lines of best fit", "Box plots and comparing distributions",
+    "Calculus", "Circle geometry", "Circles: circumference and area",
+    "Collecting and displaying data", "Comparing data displays",
+    "Compound interest and financial maths", "Conditional probability and independence",
+    "Congruence and transformations", "Congruence, similarity and proof", "Data analysis",
+    "Data analysis, probability and statistics", "Discrete mathematics",
+    "Expanding and factorising", "Expanding and factorising quadratics",
+    "Financial mathematics", "Fractions, decimals and percentages",
+    "Functions, relations and graphs", "Geometry and measurement",
+    "Geometry, measurement and trigonometry", "Graphs of linear and non-linear relations",
+    "Histograms and comparing distributions", "Index laws", "Indices and prime factorisation",
+    "Indices and scientific notation", "Indices and surds", "Integers and negative numbers",
+    "Introducing non-linear graphs", "Linear and simultaneous equations", "Linear equations",
+    "Linear equations and their graphs", "Linear relationships",
+    "Linear relationships and gradient", "Logarithms", "Matrices",
+    "Mean, median, mode and range", "Measures of centre and spread",
+    "Networks and decision mathematics", "Networks and matrices", "Number and algebra",
+    "Parabolas and non-linear graphs", "Percentages and financial calculations",
+    "Polynomials", "Probability of single events", "Pythagoras' theorem",
+    "Pythagoras' theorem in problems", "Quadratics", "Rates and ratios", "Ratios",
+    "Recursion and financial modelling", "Relative frequency and two-step probability",
+    "Right-angled trigonometry", "Similarity and scale factors",
+    "Simple interest and financial maths", "Sine and cosine rules",
+    "Solving quadratic equations", "Space and measurement", "Statistics",
+    "Statistics and probability", "Surface area and volume",
+    "Surface area and volume of composite solids",
+    "The Cartesian plane and linear relationships", "Triangles and quadrilaterals",
+    "Trigonometry", "Trigonometry and its applications", "Two-step chance experiments",
+    "Volume of rectangular prisms"
   ]
 };
 
@@ -34,18 +67,13 @@ export function category(field, value) {
   return CATEGORIES[field]?.includes(value) ? value : "Other";
 }
 
-// Topic carries the long tail of TOPICS entries, which are teacher-facing
-// strings rather than a short fixed set. Allow a known-safe shape (letters,
-// digits, spaces and basic punctuation, reasonably short) so real topic names
-// survive, and fold anything else into "Other". This still admits no free
-// text of any length: a sentence fails the word-count test.
-const TOPIC_SHAPE = /^[A-Za-z0-9 ,'()/.-]{1,60}$/;
-
+// An exact match against the list above, nothing else. An earlier version of
+// this guard accepted anything of roughly the right shape and length, which
+// would have let a short sentence through, and a student's sentence can contain
+// their own name. Shape is not a privacy control; a list is.
 function topicCategory(value) {
   if (value == null || value === "") return null;
-  if (CATEGORIES.topic.includes(value)) return value;
-  if (TOPIC_SHAPE.test(value) && value.split(/\s+/).length <= 8) return value;
-  return "Other";
+  return CATEGORIES.topic.includes(value) ? value : "Other";
 }
 
 function clampInt(value, min, max) {

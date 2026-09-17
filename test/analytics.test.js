@@ -62,3 +62,22 @@ test("safeCounts folds unknown labels together", () => {
   assert.equal(out.find(r => r.outcome === "solved").n, 3);
   assert.equal(out.find(r => r.outcome === "Other").n, 3);
 });
+
+test("a real topic name survives, however long", () => {
+  // The longest label the app can produce, seven words. An earlier shape-based
+  // guard made this a judgement call about length; now it is simply on the list.
+  const out = sanitiseEvent({ device: "a1", outcome: "solved", topic: "Area and volume of prisms and cylinders" });
+  assert.equal(out.topic, "Area and volume of prisms and cylinders");
+});
+
+test("a short sentence containing a name cannot pass as a topic", () => {
+  // Eight words, well-formed, and it would have slipped through a shape check.
+  const out = sanitiseEvent({ device: "a1", outcome: "solved", topic: "I am stuck on my homework about Jane" });
+  assert.equal(out.topic, "Other");
+  assert.equal(JSON.stringify(out).includes("Jane"), false);
+});
+
+test("a topic that is nearly right is still rejected", () => {
+  const out = sanitiseEvent({ device: "a1", outcome: "solved", topic: "calculus" });
+  assert.equal(out.topic, "Other");
+});
