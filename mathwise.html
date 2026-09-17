@@ -10337,18 +10337,73 @@ function renderNetworkPanel(){
   };
 }
 
-function takePhoto(file){
-  if (!file) return;
-  if (file.size > 3 * 1024 * 1024){
-    S.intakeError = "That image is too large. Take the photo again at a smaller size."; render(); return;
+/* --- Photos ----------------------------------------------------------- *
+ * A phone camera produces 8 to 12MB images, which used to mean telling a
+ * student their photo was too big. Photographing a question is the whole point
+ * of the app, so rather than refusing the photo, the browser shrinks it before
+ * sending: no size limit for the student, and a far quicker upload on school
+ * wifi.
+ *
+ * 1600px on the long edge is comfortably enough to read a textbook question;
+ * the originals carry far more detail than the reading ever uses. If anything
+ * about the resize fails, the original file is used unchanged rather than
+ * losing the photo.
+ * ------------------------------------------------------------------ */
+
+const PHOTO_MAX_EDGE = 1600;
+
+function readFileAsDataUrl(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("That file could not be opened."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function shrinkImage(file){
+  const originalUrl = await readFileAsDataUrl(file);
+  const fallbackMime = (file.type && file.type.startsWith("image/")) ? file.type : "image/jpeg";
+  const fallback = { dataUrl: originalUrl, b64: originalUrl.split(",")[1], mime: fallbackMime };
+  // An animated GIF loses its animation through a canvas, and nothing here
+  // needs a still frame of one badly enough to mangle it.
+  if (fallbackMime === "image/gif") return fallback;
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("image decode failed"));
+      el.src = originalUrl;
+    });
+    const longest = Math.max(img.naturalWidth, img.naturalHeight);
+    if (!longest) return fallback;
+    const scale = Math.min(1, PHOTO_MAX_EDGE / longest);
+    // Already small enough, and re-encoding would only lose quality.
+    if (scale === 1 && originalUrl.length < 3000000) return fallback;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext("2d");
+    // A page photo is mostly white, and a transparent PNG would otherwise come
+    // out with a black background once flattened into a JPEG.
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    if (!dataUrl || dataUrl.length < 100) return fallback;
+    return { dataUrl, b64: dataUrl.split(",")[1], mime: "image/jpeg" };
+  } catch (e){
+    return fallback;
   }
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const dataUrl = reader.result, b64 = String(dataUrl).split(",")[1];
-    const mime = (file.type && file.type.startsWith("image/")) ? file.type : "image/jpeg";
-    if (!["image/png","image/jpeg","image/webp","image/gif"].includes(mime)){
-      S.intakeError = "That kind of image cannot be read. Use a PNG or JPG."; render(); return;
-    }
+}
+
+async function takePhoto(file){
+  if (!file) return;
+  if (!(file.type || "").startsWith("image/")){
+    S.intakeError = "That kind of file cannot be read. Use a photo or a screenshot."; render(); return;
+  }
+  try {
+    const { dataUrl, b64, mime } = await shrinkImage(file);
     S.intakeBusy = true; S.intakeError = ""; render();
     try {
       const raw = await callClaude(
@@ -10359,34 +10414,30 @@ function takePhoto(file){
       S.intake = { dataUrl, mime, b64, tx: parseJsonReply(raw) };
     } catch (err){ S.intakeError = err.message; }
     S.intakeBusy = false; render();
-  };
-  reader.onerror = () => { S.intakeError = "That file could not be opened."; render(); };
-  reader.readAsDataURL(file);
+  } catch (err){
+    S.intakeError = err.message || "That file could not be opened.";
+    S.intakeBusy = false; render();
+  }
 }
 
 // A photo of the student's own attempt, sent as part of the live dialogue
 // (unlike takePhoto/readMarkedWork, which are one-off calls) — the image
 // stays in S.messages and is sent to Claude alongside every later turn's
 // history, so it goes through submit() like any other reply.
-function sendAttemptPhoto(file){
+async function sendAttemptPhoto(file){
   if (!file) return;
-  if (file.size > 3 * 1024 * 1024){
-    S.attemptError = "That image is too large. Take the photo again at a smaller size."; render(); return;
+  if (!(file.type || "").startsWith("image/")){
+    S.attemptError = "That kind of file cannot be read. Use a photo or a screenshot."; render(); return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = reader.result, b64 = String(dataUrl).split(",")[1];
-    const mime = (file.type && file.type.startsWith("image/")) ? file.type : "image/jpeg";
-    if (!["image/png","image/jpeg","image/webp","image/gif"].includes(mime)){
-      S.attemptError = "That kind of image cannot be read. Use a PNG or JPG."; render(); return;
-    }
+  try {
+    const { dataUrl, b64, mime } = await shrinkImage(file);
     // Only reachable from the "show me the solution" panel, so this always
     // asks for the full solution once the attempt has been looked at —
     // there's no other route into sendAttemptPhoto that wants just a hint.
     submit("Here's a photo of my attempt so far. " + JUST_SHOW_ME, true, dataUrl, { mime, b64 });
-  };
-  reader.onerror = () => { S.attemptError = "That file could not be opened."; render(); };
-  reader.readAsDataURL(file);
+  } catch (err){
+    S.attemptError = err.message || "That file could not be opened."; render();
+  }
 }
 
 /* --- Save as PDF ----------------------------------------------------- *
@@ -10829,18 +10880,13 @@ function fbListHtml(){
     </div>`).join("");
 }
 
-function readMarkedWork(file){
+async function readMarkedWork(file){
   if (!file) return;
-  if (file.size > 3 * 1024 * 1024){
-    S.fbError = "That image is too large. Take the photo again at a smaller size."; render(); return;
+  if (!(file.type || "").startsWith("image/")){
+    S.fbError = "That kind of file cannot be read. Use a photo or a screenshot."; render(); return;
   }
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const dataUrl = reader.result, b64 = String(dataUrl).split(",")[1];
-    const mime = (file.type && file.type.startsWith("image/")) ? file.type : "image/jpeg";
-    if (!["image/png","image/jpeg","image/webp","image/gif"].includes(mime)){
-      S.fbError = "That kind of image cannot be read. Use a PNG or JPG."; render(); return;
-    }
+  try {
+    const { dataUrl, b64, mime } = await shrinkImage(file);
     S.fbBusy = true; S.fbError = ""; render();
     try {
       const result = await callClaude(
@@ -10860,9 +10906,10 @@ function readMarkedWork(file){
       });
     } catch (err){ S.fbError = err.message; }
     S.fbBusy = false; render();
-  };
-  reader.onerror = () => { S.fbError = "That file could not be opened."; render(); };
-  reader.readAsDataURL(file);
+  } catch (err){
+    S.fbError = err.message || "That file could not be opened.";
+    S.fbBusy = false; render();
+  }
 }
 
 function feedbackText(){
