@@ -74,6 +74,7 @@ p{margin:0 0 .7rem}
   border-bottom:1px solid var(--rule);padding-bottom:14px;margin-bottom:20px;flex-wrap:wrap}
 .masthead .sub{color:var(--slate);font-size:.88rem;margin-top:2px}
 .course-pick{text-align:right;font-size:.84rem;color:var(--slate)}
+.course-pick select{width:auto;min-width:210px;margin-top:4px}
 /* Staff link to the dashboard. Deliberately quiet: students have no reason to
    use it, and the page behind it asks for a password anyway. */
 .stats-link{display:inline-flex;align-items:center;justify-content:center;width:30px;
@@ -873,11 +874,22 @@ plot — xmin, xmax, optional ymin/ymax, curves:[{expr,label,from,to} | {vertica
   trig question) must be written as sin(x*pi/180) — never sin(x) with x running 0-360, which computes
   complete nonsense (over 50 full oscillations, not one smooth wave). asin/acos/atan likewise RETURN
   radians; multiply by 180/pi to report an angle in degrees.
+  For a genuine RADIAN-axis circular-function graph (VCE Methods: y = a sin(n(t - h)) + k and similar —
+  never for a degrees-axis Year 10 trig graph, which stays as plain numbers), set xUnit:"pi" so the
+  x-axis is labelled in exact multiples of pi (pi/2, pi, 3pi/2, 2pi, ...) instead of decimals like
+  1.5708 — the standard convention these graphs are always drawn with. xmin/xmax are still given as
+  plain decimal radian values (e.g. -3.14159 for -pi, 6.28318 for 2pi); the app places the tick marks
+  at exact pi fractions on its own regardless of that decimal's precision.
   A curve entry can be {vertical:c,label} instead of {expr,label} for an actual graph of x=c — a
   genuine vertical line is never a function of x, so it can't use expr. Give it as its own solid,
   labelled curve, not as vlines/hlines (those draw a dashed reference marker, the wrong convention for
   "this line IS the answer" rather than an auxiliary guide like a definite-integral bound).
   shade fills the region under curve number "curve" (0 is the first) from x = from to x = to. Give "toCurve" as well to shade between two curves instead of down to the axis. "label" writes the value inside the region.
+  riemann:[{curve,from,to,n,method}] draws a LEFT/RIGHT/MIDPOINT-ENDPOINT or TRAPEZOIDAL area
+  ESTIMATE — n separate rectangles (method:"left"|"right"|"midpoint") or trapeziums
+  (method:"trapezoid") drawn edge to edge under curve number "curve" between x=from and x=to,
+  each one its own outlined shape (labelled R1, R2, ... when n<=10) — never use plain "shade" for
+  this, a smooth filled region is the WRONG picture for an estimate built from separate strips.
   vectors draws an arrow, for a position vector r(t) or similar: "to" is the arrowhead end, "from" defaults to the origin if left out, "label" (e.g. "r(t)") sits at the midpoint. Use this whenever a question is genuinely about a vector, not just a curve traced by a parameter.
   regions:[{type:"horizontal"|"vertical"|"line",y|x|(m&c),direction:"above"|"below"|"left"|"right",strict,label}]
   shades an open half-plane running to the axes' own edge — for "sketch/graph the region y >= -2" or
@@ -1158,6 +1170,20 @@ columnalgorithm — the written column algorithm for a whole-number add/subtract
   setup:true draws only a and b with the operator and rule line — no carries, borrows, partial products
   or answer — for the same live-tutoring sequence as shortdivision's setup: show the bare setup first,
   work through it with the student, only call this again without setup once they've solved it or asked.
+polydivision — the completed polynomial long-division bracket: dividend:[...] (coefficients, highest
+  power first, explicit 0 for any missing degree), divisor:[a,b] (for a*x+b), quotient:[...]
+  (coefficients, highest power first). The app recomputes every multiply/subtract row itself from
+  these three arrays, so the arithmetic can never disagree with the picture. Use this ONLY for a
+  division the working has already fully solved (an "Example N" from a textbook being reproduced, or
+  the interactive polynomial-division exercise's own completion figure) — never as a live,
+  unsolved exercise; that's a different, interactive mechanism (see the polydivision fenced block
+  documented separately), not a figure at all.
+syndivision — the completed synthetic-division grid: dividend:[...] (coefficients, highest power
+  first, explicit 0 for any missing degree), divisor:[a,b] (for a*x+b — works for ANY linear
+  divisor, not just a monic one; a leading coefficient other than 1 adds a final row dividing the
+  result by that coefficient). The app recomputes the root, every product, and every sum itself
+  from just these two arrays. Same rule as polydivision: only for an already-solved division being
+  reproduced, never a live exercise.
 factortree — a prime factor tree: n:60, optional children:[{n},{n}] (exactly two, recursively, on any
   node that isn't left prime). A leaf (no children) is where that branch stops — it must actually be
   prime. Work the tree out yourself and give the whole structure; the app only draws it, it does not
@@ -1237,6 +1263,50 @@ Choosing a diagram:
   "from the graph above" or "using the same curve" — draw it again with that part's own
   readings marked. A student reading part d should not have to scroll back to part c to see
   which lines were ruled. One figure per part, up to four in an answer.`;
+
+const POLYDIVISION_SPEC = `POLYNOMIAL LONG DIVISION EXERCISE
+
+When the question is genuinely "divide this polynomial by this LINEAR expression" (an expression of
+the form ax+b, a not 0) — whether the student typed it themselves or it came from a photographed
+question — do not solve it in prose. Instead, write one short lead-in sentence (e.g. "Let's work
+through this division step by step.") and then a fenced block tagged "polydivision" containing one
+JSON object with the dividend and divisor as coefficient arrays, highest power first, WITH an
+explicit 0 for every missing degree (x^3-8 is [1,0,0,-8], never [1,-8], since the app's own layout
+depends on knowing the true degree):
+
+\`\`\`polydivision
+{"dividend":[1,1,-14,-24],"divisor":[1,2]}
+\`\`\`
+
+This starts an interactive exercise the app itself runs — say nothing about the quotient, the
+remainder, or any intermediate step in your own reply; the app handles all of that. Do NOT use this
+for a divisor that is not linear (quadratic or higher), and do NOT use this together with a
+"figure" block in the same reply — this fence takes over the whole screen, unlike a figure which
+sits inside your answer.`;
+
+const RIEMANNSUM_SPEC = `RIEMANN SUM (AREA ESTIMATE) EXERCISE
+
+When the question is genuinely "estimate the area under this curve using N left/right/midpoint
+rectangles" or "using N trapeziums/the trapezoidal rule" — whether typed or from a photographed
+question — do not solve it in prose. Instead, write one short lead-in sentence (e.g. "Let's work
+through this step by step.") and then a fenced block tagged "riemannsum" containing one JSON object:
+
+\`\`\`riemannsum
+{"fx":"x^2+1","from":0,"to":4,"n":4,"method":"left","decimalPlaces":2}
+\`\`\`
+
+- "fx" uses the exact same expression syntax as a "curves" entry's "expr" above (always "*" for
+  multiplication, trig functions in radians, "pi"/"e" available) — never a different dialect.
+- "method" is exactly one of "left", "right", "midpoint", "trapezoid" — VCE's own vocabulary for
+  which sample point each rectangle uses, or the trapezoidal rule.
+- "decimalPlaces" is the number of decimal places the question itself asks for (e.g. "correct to 2
+  decimal places" means 2). Omit this field entirely if the question doesn't state a rounding
+  instruction — the app falls back to a sensible default on its own.
+
+This starts an interactive exercise the app itself runs — say nothing about the individual strip
+heights or the final total in your own reply; the app handles all of that. Do NOT use this together
+with a "figure" block in the same reply — this fence takes over the whole screen, unlike a figure
+which sits inside your answer.`;
 
 const TABLE_SPEC = `TABLES
 
@@ -1502,7 +1572,7 @@ Return one JSON object and nothing else. No commentary, no code fences.
   "diagram_description": "what the diagram shows, or an empty string",
   "is_network": true or false,
   "network": { "vertices": [{"id":"v0","label":"A"},{"id":"v1","label":"B"}], "edges": [{"from":"v0","to":"v1","weight":5,"directed":false}] },
-  "network_algorithm": "kruskal" or "prim" or null,
+  "network_algorithm": "kruskal" or "prim" or "dijkstra" or null,
   "confidence": "high" or "medium" or "low",
   "unclear": ["anything you could not read with certainty"]
 }
@@ -1517,10 +1587,11 @@ Rules:
   for an unweighted edge, never invent one. Set "directed" to true only if that edge is drawn with an
   arrowhead. Include every vertex and every edge visible, even if there are many. Leave "network" out
   entirely (or empty) only when "is_network" is false.
-- Set "network_algorithm" to "kruskal" or "prim" only when the question's own text explicitly asks
-  to apply that named algorithm ("Apply Kruskal's algorithm...", "Use Prim's algorithm..."). Leave
-  it null for every other network question, including ones about shortest paths, Euler's formula,
-  walks/trails, Hamiltonian paths, Dijkstra's algorithm, or a network question with no named
+- Set "network_algorithm" to "kruskal", "prim" or "dijkstra" only when the question's own text
+  explicitly asks to apply that named algorithm ("Apply Kruskal's algorithm...", "Use Prim's
+  algorithm...", "Apply Dijkstra's algorithm...", "find the shortest path/route between..." style
+  wording that clearly means Dijkstra's). Leave it null for every other network question, including
+  ones about Euler's formula, walks/trails, Hamiltonian paths, or a network question with no named
   algorithm instruction at all.
 - Set "confidence" to low if the image is blurred, cropped, at a steep angle, or if handwriting is hard to read. Say so rather than guessing.`;
 
@@ -1665,6 +1736,7 @@ const S = {
   error: "",
   intake: null,
   mst: null,
+  dijkstra: null,
   intakeBusy: false,
   intakeEdit: false,
   intakeError: "",
@@ -2273,6 +2345,30 @@ function texWrap(s){
   return /[A-Za-z]{2,}/.test(escaped) ? ("\\text{" + escaped + "}") : escaped;
 }
 
+// Converts one of this app's own expression strings (the "curves[].expr"/"fx" syntax compile()
+// evaluates — see FUNCS above) into real LaTeX: backslash-prefixes the function names that render
+// correctly with their existing plain parens (sin/cos/tan/asin->arcsin/acos->arccos/atan->arctan/
+// exp/ln/log/sinh/cosh/tanh), and turns the required "*" multiplication operator into "\times".
+// sqrt/abs are deliberately left as bare words — \sqrt needs its argument braced, not just a
+// backslash prefix over existing parens, and abs isn't a LaTeX macro at all — both degrade to
+// plain italic letters, which is harmless. Once this returns, the string always either contains a
+// backslash (function names/\times) or has no function names to mis-wrap in the first place, so
+// texWrap()'s own "already deliberate LaTeX" passthrough is always the right behaviour for it.
+function exprToLatex(expr){
+  const rename = { asin: "arcsin", acos: "arccos", atan: "arctan" };
+  return String(expr).replace(/\b(sin|cos|tan|asin|acos|atan|exp|ln|log|sinh|cosh|tanh)\b/g,
+    m => "\\" + (rename[m] || m)).replace(/\*/g, "\\times ");
+}
+
+// Years 7-9 write graphs as "y = ...", matching how those years are taught; Year 10 onward (MYP
+// 10, every VCE course, every IB course) switches to function notation "f(x) = ...", matching how
+// those courses actually write it. Keyed on the exact course key, not just the MYP/VCE/IB band,
+// since MYP itself spans both conventions (7-9 vs 10).
+const CURVE_Y_ONLY_COURSES = ["myp7", "myp8", "myp9"];
+function curveVarLabel(courseKey){
+  return CURVE_Y_ONLY_COURSES.includes(courseKey) ? "y" : "f(x)";
+}
+
 // Every diagram's text — tick numbers, axis titles, point and category labels —
 // goes through this one function, so rendering it as real LaTeX here is what
 // makes every figure in the app LaTeX-labelled, not a per-diagram change.
@@ -2311,11 +2407,49 @@ function niceStep(range){
   return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
 }
 
+function gcdInt(a, b){ return b ? gcdInt(b, a % b) : a; }
+
+// A "nice" tick spacing for a radian axis: niceStep()'s base-10 steps (1, 2, 5, 10...)
+// land on unreadable decimals like 1.5708 for a range of pi, but VCE circular-function
+// graphs are always labelled at simple fractions of pi (pi/2, pi/4, pi/6...) — this picks
+// the simplest such spacing that gives a sensible number of ticks.
+function niceStepPi(range){
+  const rangeInPi = range / Math.PI;
+  const steps = [1/12, 1/6, 1/4, 1/3, 1/2, 1, 2, 3, 4, 6, 8, 12, 16, 24];
+  for (const s of steps){ if (rangeInPi / s <= 9) return s * Math.PI; }
+  return Math.ceil(rangeInPi / 9) * Math.PI;
+}
+
+// Formats a radian tick value as real LaTeX pi notation ("\pi", "\frac{3\pi}{2}",
+// "-\frac{\pi}{4}") instead of a decimal — texWrap() passes any string containing a
+// backslash straight through to KaTeX untouched, so this renders as proper maths,
+// the same way every other figure label in the app does.
+function piLabel(v){
+  if (Math.abs(v) < 1e-9) return "0";
+  const k = v / Math.PI;
+  for (const den of [1, 2, 3, 4, 6, 8, 12, 16, 24]){
+    const n = Math.round(k * den);
+    if (Math.abs(k * den - n) < 1e-6){
+      const g = gcdInt(Math.abs(n), den) || 1;
+      const nn = n / g, dd = den / g;
+      const sign = nn < 0 ? "-" : "";
+      const an = Math.abs(nn);
+      const piStr = an === 1 ? "\\pi" : an + "\\pi";
+      return sign + (dd === 1 ? piStr : "\\frac{" + piStr + "}{" + dd + "}");
+    }
+  }
+  return num(v);
+}
+
 /* The left margin is measured, not assumed: "1400" needs more room than "9",
    and a fixed margin is how an axis title ends up sitting on the numbers.
-   Returns L and R so callers that lay out by hand use the same edges. */
-function axes(xmin, xmax, ymin, ymax, xlabel, ylabel){
-  const xs = niceStep(xmax - xmin), ys = niceStep(ymax - ymin);
+   Returns L and R so callers that lay out by hand use the same edges.
+   opts.xPi:true switches the x-axis to radian tick spacing/labels (see
+   niceStepPi/piLabel above) — every other caller leaves it unset and gets the
+   original plain-decimal behaviour. */
+function axes(xmin, xmax, ymin, ymax, xlabel, ylabel, opts){
+  const xPi = !!(opts && opts.xPi);
+  const xs = xPi ? niceStepPi(xmax - xmin) : niceStep(xmax - xmin), ys = niceStep(ymax - ymin);
 
   const yLabels = [];
   for (let v = Math.ceil(ymin / ys) * ys; v <= ymax + 1e-9; v += ys) yLabels.push(String(num(v)));
@@ -2335,7 +2469,7 @@ function axes(xmin, xmax, ymin, ymax, xlabel, ylabel){
   let g = "";
   for (let v = Math.ceil(xmin / xs) * xs; v <= xmax + 1e-9; v += xs){
     g += `<line x1="${num(X(v))}" y1="${T}" x2="${num(X(v))}" y2="${num(H-B)}" stroke="${C_GRID}"/>`;
-    g += txt(X(v), H - B + 17, num(v), { size:11, fill:C_AXIS });
+    g += txt(X(v), H - B + 17, xPi ? piLabel(v) : num(v), { size:11, fill:C_AXIS });
   }
   for (let v = Math.ceil(ymin / ys) * ys; v <= ymax + 1e-9; v += ys){
     g += `<line x1="${L}" y1="${num(Y(v))}" x2="${num(W-R)}" y2="${num(Y(v))}" stroke="${C_GRID}"/>`;
@@ -2356,7 +2490,7 @@ function axes(xmin, xmax, ymin, ymax, xlabel, ylabel){
 const FIG = {};
 
 FIG.plot = spec => {
-  const xmin = +spec.xmin, xmax = +spec.xmax;
+  let xmin = +spec.xmin, xmax = +spec.xmax;
   if (!(xmax > xmin)) throw new Error("x range");
   // x=c is a real graph (e.g. "sketch x=5") but is never a function of x, so
   // it can't compile like the rest of "curves" — kept in the same array
@@ -2397,7 +2531,30 @@ FIG.plot = spec => {
       ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0);
     }
   }
-  const ax = axes(xmin, xmax, +ymin, +ymax, spec.xlabel || "x", spec.ylabel || "y");
+  // A genuine circle (spec.circles) needs equal pixel-per-unit scale on both axes, or it
+  // renders as a visibly squashed ellipse — the canvas itself isn't square, so equal x/y data
+  // RANGES (e.g. -1.2 to 1.2 on both) still map to different pixel scales without this. This
+  // matters most for a unit-circle diagram (defining sin/cos, quadrant symmetry), one of the
+  // most-repeated diagrams in the circular-functions topic, where looking like a true circle is
+  // the entire pedagogical point. Widen whichever axis has the larger scale (too little range
+  // for its own pixel space) so both match — using the same approximate margins axes() itself
+  // computes, close enough since a small ymin/ymax shift barely changes the real margin.
+  if ((spec.circles || []).length){
+    const approxL = 55, approxR = 30, approxT = 34, approxB = spec.xlabel ? 52 : 38;
+    const innerW = W - approxL - approxR, innerH = H - approxT - approxB;
+    const xScale = innerW / (xmax - xmin), yScale = innerH / (ymax - ymin);
+    const finalScale = Math.min(xScale, yScale);
+    if (xScale > finalScale){
+      const newRange = innerW / finalScale, cx2 = (xmin + xmax) / 2;
+      xmin = cx2 - newRange / 2; xmax = cx2 + newRange / 2;
+    }
+    if (yScale > finalScale){
+      const newRange = innerH / finalScale, cy2 = (+ymin + +ymax) / 2;
+      ymin = cy2 - newRange / 2; ymax = cy2 + newRange / 2;
+    }
+  }
+  const ax = axes(xmin, xmax, +ymin, +ymax, spec.xlabel || "x", spec.ylabel || "y",
+    { xPi: spec.xUnit === "pi" });
   const { g, X, Y } = ax;
   let body = g;
 
@@ -2429,6 +2586,35 @@ FIG.plot = spec => {
       const ytop = clamp(isFinite(top.f(mx)) ? top.f(mx) : 0);
       const ybot = under ? clamp(under.f(mx)) : clamp(0);
       body += txt(X(mx), (Y(ytop) + Y(ybot)) / 2 + 5, sh.label, { size:13, weight:600, fill:C_LINE });
+    }
+  });
+
+  // A left/right/midpoint-endpoint or trapezoidal ESTIMATE for the area under a graph is a
+  // genuinely different picture from "shade" above: n separate rectangles (or trapeziums) drawn
+  // edge to edge under the curve, each one individually outlined, not one smooth filled region —
+  // this is the foundational diagram of the whole "estimating area under a graph" topic (left
+  // read off one sample point per strip, right off the other end, trapezoidal averages both).
+  (spec.riemann || []).forEach(rs => {
+    const top = curves[+rs.curve || 0];
+    if (!top) return;
+    const a = +rs.from, b = +rs.to, n = Math.max(1, Math.round(+rs.n) || 1);
+    if (!isFinite(a) || !isFinite(b) || b <= a) return;
+    const w = (b - a) / n, method = rs.method || "left";
+    for (let i = 0; i < n; i++){
+      const x0 = a + i * w, x1 = x0 + w;
+      let d;
+      if (method === "trapezoid"){
+        const y0 = clamp(isFinite(top.f(x0)) ? top.f(x0) : 0), y1 = clamp(isFinite(top.f(x1)) ? top.f(x1) : 0);
+        d = `M ${num(X(x0))} ${num(Y(0))} L ${num(X(x0))} ${num(Y(y0))} L ${num(X(x1))} ${num(Y(y1))} L ${num(X(x1))} ${num(Y(0))} Z`;
+      } else {
+        const sampleX = method === "right" ? x1 : method === "midpoint" ? (x0 + x1) / 2 : x0;
+        const h = clamp(isFinite(top.f(sampleX)) ? top.f(sampleX) : 0);
+        d = `M ${num(X(x0))} ${num(Y(0))} L ${num(X(x0))} ${num(Y(h))} L ${num(X(x1))} ${num(Y(h))} L ${num(X(x1))} ${num(Y(0))} Z`;
+      }
+      body += `<path d="${d}" fill="${C_FILL}" fill-opacity="0.22" stroke="${C_LINE}" stroke-width="1"/>`;
+      // Individually labelling each strip R1, R2, ... only stays readable for the small n the
+      // textbook itself ever draws by hand (never dozens of computer-generated strips).
+      if (n <= 10) body += txt((X(x0) + X(x1)) / 2, Y(0) - 8, "R" + (i + 1), { size:10, weight:600, fill:C_LINE });
     }
   });
 
@@ -2496,12 +2682,26 @@ FIG.plot = spec => {
       { weight:600, fill:C_LINE, bg:"rgba(255,255,255,0.88)" });
   });
 
+  // A "family of curves" question (families of quadratics/cubics, or families of functions
+  // under transformation) plots 3+ curves on one axis to compare them — the first two colours
+  // here match C_LINE/C_ALT exactly, so an ordinary single- or two-curve graph is unaffected,
+  // but a third curve onward now gets its own distinct colour instead of repeating C_ALT and
+  // becoming visually indistinguishable from the second curve.
+  const CURVE_PALETTE = ["#4F2759", "#C59F40", "#6B3A78", "#8B6BA0", "#D9BC72", "#3A1E43"];
+  // The equation itself is always shown next to its curve — "y=" for Years 7-9, "f(x)=" from Year
+  // 10 onward (curveVarLabel) — alongside any custom label the question already gave it (e.g. a
+  // word-problem's "Cost of Plan A"), never instead of it: eqLabel() combines the two into one
+  // string with the custom part in \text{} and the equation in real math, rather than replacing
+  // one with the other.
+  const eqLabel = (custom, eqLatex) => custom
+    ? `\\text{${String(custom).replace(/([%&#_])/g, "\\$1")}: }${eqLatex}`
+    : eqLatex;
   curves.forEach((c, i) => {
-    const colour = i === 0 ? C_LINE : C_ALT;
+    const colour = CURVE_PALETTE[i % CURVE_PALETTE.length];
     if (c.vertical !== undefined){
       body += `<path d="M ${num(X(c.vertical))} ${num(Y(+ymin))} L ${num(X(c.vertical))} ${num(Y(+ymax))}"
         fill="none" stroke="${colour}" stroke-width="2.2"/>`;
-      if (c.label) body += txt(X(c.vertical) + 6, ax.T + 16 + i * 16, c.label,
+      body += txt(X(c.vertical) + 6, ax.T + 16 + i * 16, eqLabel(c.label, `x=${num(c.vertical)}`),
         { anchor:"start", fill:colour, weight:600, bg:"rgba(255,255,255,0.88)" });
       return;
     }
@@ -2516,7 +2716,8 @@ FIG.plot = spec => {
     // A curve that rises into this corner can pass directly behind its own
     // label — an opaque backing keeps the label readable either way, rather
     // than trying to predict where the curve will and won't be.
-    if (c.label) body += txt(W - ax.R - 4, ax.T + 16 + i * 16, c.label,
+    const eqLatex = `${curveVarLabel(S.courseKey)}=${exprToLatex(c.expr)}`;
+    body += txt(W - ax.R - 4, ax.T + 16 + i * 16, eqLabel(c.label, eqLatex),
       { anchor:"end", fill:colour, weight:600, bg:"rgba(255,255,255,0.88)" });
   });
   (spec.vectors || []).forEach((v, i) => {
@@ -2981,18 +3182,43 @@ FIG.network = spec => {
       <marker id="arh" viewBox="0 0 10 10" refX="9" refY="5"
       markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="${C_ALT}"/></marker></defs>` : "";
+  // Two edges sharing an unordered vertex pair — or an edge whose from/to are the same vertex
+  // (a loop) — can't both be drawn by the plain straight-line formula below: a loop collapses to
+  // a zero-length line (invisible), and duplicate edges would sit exactly on top of each other.
+  // Group by pair first so duplicates can be fanned out with a parallel offset, and give loops
+  // their own small-circle drawing instead.
+  const pairKey = e => String(e.from) === String(e.to) ? null
+    : [String(e.from), String(e.to)].sort().join(" ");
+  const pairCount = {};
+  (spec.edges || []).forEach(e => { const k = pairKey(e); if (k) pairCount[k] = (pairCount[k] || 0) + 1; });
+  const pairSeen = {};
   (spec.edges || []).forEach(e => {
     const a = at(e.from), b = at(e.to);
     if (!a || !b) return;
     const hi = !!e.highlight;
+    if (String(e.from) === String(e.to)){
+      const cx = X(a.x), cy = Y(a.y), lr = 15, ly = cy - 19 - lr;
+      body += `<circle cx="${num(cx)}" cy="${num(ly)}" r="${lr}" fill="none"
+        stroke="${hi ? C_ALT : C_AXIS}" stroke-width="${hi ? 3.2 : 1.8}"/>`;
+      if (e.weight !== undefined && e.weight !== null && e.weight !== ""){
+        body += `<rect x="${num(cx-13)}" y="${num(ly-lr-19)}" width="26" height="17" rx="3" fill="#fff" opacity="0.9"/>`;
+        body += txt(cx, ly - lr - 6, e.weight, { size:12, weight:600, fill:hi ? C_ALT : C_ALT });
+      }
+      return;
+    }
     const x1 = X(a.x), y1 = Y(a.y), x2 = X(b.x), y2 = Y(b.y);
     const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, r = 19;
     const ux = dx / len, uy = dy / len;
-    body += `<line x1="${num(x1+ux*r)}" y1="${num(y1+uy*r)}" x2="${num(x2-ux*r)}" y2="${num(y2-uy*r)}"
+    const k = pairKey(e), count = pairCount[k] || 1;
+    const seen = (pairSeen[k] = (pairSeen[k] || 0) + 1) - 1;
+    const off = count > 1 ? (seen - (count - 1) / 2) * 10 : 0;
+    const px = -uy * off, py = ux * off;
+    const sx = x1 + ux*r + px, sy = y1 + uy*r + py, ex = x2 - ux*r + px, ey = y2 - uy*r + py;
+    body += `<line x1="${num(sx)}" y1="${num(sy)}" x2="${num(ex)}" y2="${num(ey)}"
       stroke="${hi ? C_ALT : C_AXIS}" stroke-width="${hi ? 3.2 : 1.8}"
       ${(directed||e.directed)?`marker-end="url(#${hi?"arh":"ar"})"`:""}/>`;
     if (e.weight !== undefined && e.weight !== null && e.weight !== ""){
-      const mx = (x1 + x2) / 2 - uy * 12, my = (y1 + y2) / 2 + ux * 12;
+      const mx = (sx + ex) / 2 - uy * 12, my = (sy + ey) / 2 + ux * 12;
       body += `<rect x="${num(mx-13)}" y="${num(my-10)}" width="26" height="17" rx="3" fill="#fff" opacity="0.9"/>`;
       body += txt(mx, my + 3, e.weight, { size:12, weight:600, fill:hi ? C_ALT : C_ALT });
     }
@@ -4093,6 +4319,169 @@ FIG.shortdivision = spec => {
   });
   if (spec.label) body += txt(w / 2, fs * 1.3, spec.label, { size:fs * 0.85, weight:600 });
   return svg(body, w, h);
+};
+
+// The completed division bracket, for embedding a finished exercise's working into the chat
+// transcript (mstFinish()/dijkstraFinish() do the same thing with FIG.network — this is the same
+// pattern for a different shape of diagram). Recomputes every row itself from dividend/divisor/
+// quotient rather than trusting a caller to also supply the intermediate rows, so the picture can
+// never disagree with the numbers that produced it.
+FIG.polydivision = spec => {
+  const dividend = (spec.dividend || []).map(Number);
+  const divisor = (spec.divisor || []).map(Number);
+  const quotient = (spec.quotient || []).map(Number);
+  if (dividend.length < 2 || divisor.length !== 2) throw new Error("need a dividend and a linear divisor");
+  const topPower = dividend.length - 1;
+
+  // Rebuild every round's multiply/subtract row from the given quotient, the same arithmetic the
+  // live exercise itself uses.
+  const rows = []; // { multiplyRow, subtractRow, startPower }
+  let remainder = dividend.slice();
+  quotient.forEach((coeff, i) => {
+    const multiplyRow = polyMultiplyRow(divisor, coeff);
+    const subtractRow = polySubtractRow(remainder, multiplyRow);
+    rows.push({ multiplyRow, subtractRow, startPower: topPower - i });
+    remainder = subtractRow;
+  });
+
+  const fs = FIG_TEXT, gap = fs * 0.7, x0 = fs * 6;
+
+  // Columns are sized to their own widest term instead of a fixed width: short division's single
+  // digits made a fixed column fine, but algebraic terms ("-14x", "+2x^2") vary far more in length,
+  // and a column too narrow for its term is what made the whole bracket look "squished" — every
+  // cell's box (sized the same way txt() itself sizes a label) overlapped its neighbours'.
+  const cellWidth = {};
+  function noteCell(text, power){
+    const w = Math.max(fs * 1.5, String(text).length * fs * 0.72 + fs);
+    if (!cellWidth[power] || w > cellWidth[power]) cellWidth[power] = w;
+  }
+  quotient.forEach((coeff, i) => {
+    const power = topPower - i - (divisor.length - 1);
+    noteCell(polyCellText(coeff, power, i === 0), power);
+  });
+  dividend.forEach((c, i) => noteCell(polyCellText(c, topPower - i, i === 0), topPower - i));
+  rows.forEach(r => {
+    r.multiplyRow.forEach((c, i) => noteCell(polyCellText(c, r.startPower - i, i === 0), r.startPower - i));
+    r.subtractRow.forEach((c, i) => noteCell(polyCellText(c, r.startPower - 1 - i, i === 0), r.startPower - 1 - i));
+  });
+  const colX = {}, colW = {};
+  let cursor = x0;
+  for (let p = topPower; p >= 0; p--){
+    colW[p] = cellWidth[p] || fs * 2.1;
+    colX[p] = cursor + colW[p] / 2;
+    cursor += colW[p] + gap;
+  }
+  const contentRight = cursor - gap;
+
+  const quotientY = fs * 1.6;
+  const dividendY = fs * 3.6;
+  let body = "";
+
+  // Quotient row, above the bracket.
+  quotient.forEach((coeff, i) => {
+    const power = topPower - i - (divisor.length - 1);
+    body += txt(colX[power], quotientY, polyCellText(coeff, power, i === 0),
+      { size: fs, weight: 600, fill: C_LINE });
+  });
+
+  // The bracket itself and the dividend row.
+  const bracketX = x0 - fs * 0.6, rightEdge = contentRight + fs * 0.4;
+  const topY = dividendY - fs * 1.5, bracketBottomY = dividendY + fs * 0.6 + rows.length * fs * 3.4;
+  body += `<path d="M ${num(bracketX)} ${num(bracketBottomY)} L ${num(bracketX)} ${num(topY)} L ${num(rightEdge)} ${num(topY)}"
+    fill="none" stroke="${C_LINE}" stroke-width="1.3"/>`;
+  body += txt(bracketX - fs * 2.2, dividendY, polyTermsText(divisor, 1),
+    { size: fs, weight: 600, fill: C_LINE });
+  dividend.forEach((c, i) => {
+    body += txt(colX[topPower - i], dividendY, polyCellText(c, topPower - i, i === 0),
+      { size: fs, weight: 600, fill: C_INK });
+  });
+
+  // One multiply row + one subtract row per completed round.
+  let rowY = dividendY + fs * 1.7;
+  rows.forEach(r => {
+    const startPower = r.startPower;
+    r.multiplyRow.forEach((c, i) => {
+      body += txt(colX[startPower - i], rowY, polyCellText(c, startPower - i, i === 0),
+        { size: fs, weight: 600, fill: C_INK });
+    });
+    body += `<line x1="${num(colX[startPower] - colW[startPower] / 2)}" y1="${num(rowY + fs * 0.5)}"
+      x2="${num(colX[startPower - r.multiplyRow.length + 1] + colW[startPower - r.multiplyRow.length + 1] / 2)}" y2="${num(rowY + fs * 0.5)}"
+      stroke="${C_LINE}" stroke-width="1"/>`;
+    rowY += fs * 1.7;
+    r.subtractRow.forEach((c, i) => {
+      body += txt(colX[startPower - 1 - i], rowY, polyCellText(c, startPower - 1 - i, i === 0),
+        { size: fs, weight: 600, fill: C_ALT });
+    });
+    rowY += fs * 1.7;
+  });
+
+  const w = Math.max(W, rightEdge + 40), h = rowY + fs;
+  return svg(body, w, h);
+};
+
+// The completed synthetic-division grid — root and vertical bar on the left, dividend row,
+// products row, a rule, sums row, and (only when the divisor's own leading coefficient isn't 1) a
+// final row dividing the sums row by that coefficient to reach the true quotient. Recomputes every
+// row itself from dividend/divisor alone, the same "trust arithmetic, not a caller" rule
+// FIG.polydivision and FIG.shortdivision already follow.
+FIG.syndivision = spec => {
+  const dividend = (spec.dividend || []).map(Number);
+  const divisor = (spec.divisor || []).map(Number);
+  if (dividend.length < 2 || divisor.length !== 2) throw new Error("need a dividend and a linear divisor");
+  const root = polyRound6(-divisor[1] / divisor[0]);
+  const n = dividend.length - 1;
+  const products = [], sums = [dividend[0]];
+  for (let i = 1; i <= n; i++){
+    products[i] = polyRound6(root * sums[i - 1]);
+    sums[i] = polyRound6(dividend[i] + products[i]);
+  }
+  const needsScale = divisor[0] !== 1;
+  const scaledQuotient = needsScale ? sums.slice(0, n).map(s => polyRound6(s / divisor[0])) : null;
+
+  // Every column — dividend, product, and sum — has to stay in strict vertical alignment for the
+  // tableau to read correctly (each column's dividend/product/sum genuinely belong together), so
+  // columns are evenly spaced throughout; giving the remainder column its own wider gap earlier
+  // shifted it out of alignment with the product above it and (since every row shares this same
+  // colX) threw off the dividend row's own spacing too. colW is simply wider than before instead.
+  const fs = FIG_TEXT, colW = fs * 3.8, x0 = fs * 8;
+  const colX = i => x0 + i * colW;
+  // Row gap has to clear txt()'s own text-box height (1.7*size, split 1.17*size above its y and
+  // 0.53*size below it) or a separator line drawn "between" two rows actually lands inside one of
+  // their text boxes — 2.2*size margin never cleared that, so the rule below cut straight through
+  // the sums row's own digits. 2.6*size leaves real room on both sides.
+  const rootY = fs * 2, prodY = rootY + fs * 2.6, sumY = prodY + fs * 2.6, scaleY = sumY + fs * 2.6;
+  // Fixed margins (in fs units), not fractions of colW: a colW-proportional gap here drifted along
+  // with colW when that widened for the column-spacing fix, which is exactly what let the root
+  // label crowd the bar line in the live grid's version of this same layout — same fix here before
+  // it does the same for a wider (e.g. two-digit) root value.
+  const barX = x0 - fs * 3, rootX = barX - fs * 2.5, rightEdge = colX(n) + colW * 0.6;
+  // Halfway between the product row and sum row, minus a small correction for the box asymmetry
+  // above — this clears the product row's box bottom and the sum row's (taller) box top by the
+  // same margin on each side.
+  const ruleY = prodY + fs;
+
+  let body = "";
+  body += txt(rootX, rootY, num(root), { size: fs, weight: 600, fill: C_LINE });
+  body += `<line x1="${num(barX)}" y1="${num(rootY - fs * 1.3)}" x2="${num(barX)}" y2="${num((needsScale ? scaleY : sumY) + fs * 0.9)}"
+    stroke="${C_LINE}" stroke-width="1.6"/>`;
+  dividend.forEach((c, i) => { body += txt(colX(i), rootY, num(c), { size: fs, weight: 600, fill: C_INK }); });
+  for (let i = 1; i <= n; i++){
+    body += txt(colX(i), prodY, num(products[i]), { size: fs, weight: 600, fill: C_ALT });
+  }
+  body += `<line x1="${num(barX)}" y1="${num(ruleY)}" x2="${num(rightEdge)}" y2="${num(ruleY)}"
+    stroke="${C_LINE}" stroke-width="1.3"/>`;
+  for (let i = 0; i <= n; i++){
+    body += txt(colX(i), sumY, num(sums[i]), { size: fs, weight: 600, fill: C_LINE });
+  }
+  if (needsScale){
+    body += txt(rootX, scaleY, "÷" + num(divisor[0]), { size: fs * 0.8, weight: 600, fill: C_ALT });
+    for (let i = 0; i < n; i++){
+      body += txt(colX(i), scaleY, num(scaledQuotient[i]), { size: fs, weight: 600, fill: C_LINE });
+    }
+    body += txt(colX(n), scaleY, num(sums[n]), { size: fs, weight: 600, fill: C_ALT });
+  }
+  const h = (needsScale ? scaleY : sumY) + fs * 1.6;
+  return svg(body, Math.max(W, rightEdge + 40), h);
 };
 
 // The model chooses which factor pair to split at each step — there's no
@@ -5544,7 +5933,14 @@ function paintPreview(){
 
   if (!S.draft){
     lastGoodPreview = "";
-    nodes.forEach(n => { n.innerHTML = '<span class="mf-ghost">Ask a mathematics question</span>'; });
+    // An empty box still needs a visible caret once it's focused — otherwise a student who
+    // clicks in before typing anything sees no sign at all that the field is ready for them,
+    // since the real <input> underneath has its own native caret hidden (caret-color:transparent)
+    // in favour of this hand-drawn one.
+    const box = askBox();
+    const focused = box && document.activeElement === box;
+    nodes.forEach(n => { n.innerHTML = (focused ? '<span class="mf-text-caret"></span>' : "")
+      + '<span class="mf-ghost">Ask a mathematics question</span>'; });
     return;
   }
 
@@ -5890,6 +6286,8 @@ function wireKeyboard(scope){
     box.oninput = () => { S.draft = box.value; paintPreview(); };
     box.onkeyup = paintPreview;
     box.onclick = paintPreview;
+    box.onfocus = paintPreview;
+    box.onblur = paintPreview;
     box.onkeydown = e => {
       const hasSlots = S.draft.indexOf(SLOT) !== -1;
       if (e.key === "Enter"){
@@ -6593,7 +6991,7 @@ function renderApp(){
       fbItems:[], fbError:"", ctPlan:"", copyText:"", copyTitle:"",
       hintTurns:0, solved:false, rated:false, attemptPrompt:false, attemptError:"",
       calcBusy:false, calcError:"", studySummary:null, studySummaryBusy:false, studySummaryError:"",
-      mst:null,
+      mst:null, dijkstra:null, polydiv:null, polydivChoice:null, syndiv:null, riemann:null,
       costSession: newCostSession(), costViewSession:"" });  // REMOVABLE — see the "Cost analysis" module
     render();
   };
@@ -6617,6 +7015,11 @@ function renderApp(){
 
 function renderQuestions(el){
   if (S.mst) { renderMstExercise(el); return; }
+  if (S.dijkstra) { renderDijkstraExercise(el); return; }
+  if (S.polydivChoice) { renderPolyDivChoice(el); return; }
+  if (S.polydiv) { renderPolyDivExercise(el); return; }
+  if (S.syndiv) { renderSynDivExercise(el); return; }
+  if (S.riemann) { renderRiemannExercise(el); return; }
   const c = courseOf(S.courseKey);
   const visible = S.messages.filter(m => m.visible !== false);
   const canFollowUp = !S.busy && S.messages.length &&
@@ -6690,7 +7093,6 @@ function renderQuestions(el){
       <button class="btn-quiet" id="ratedown" aria-label="No, this did not help">Not really</button>
     </div>` : ""}
     ${S.solved && S.rated ? `<p class="muted" style="margin-top:14px">Thanks, that helps us improve MathWISE.</p>` : ""}
-
     ${!SPEECH_OK && canFollowUp ? '<p class="small">This browser cannot read answers aloud. Chrome, Edge and Safari can.</p>' : ""}
     ${S.speechError ? `<p class="err">${esc(S.speechError)}</p>` : ""}
     ${S.calcError ? `<p class="err">${esc(S.calcError)}</p>` : ""}
@@ -6716,7 +7118,7 @@ function renderQuestions(el){
       <div class="mathfield${S.showKeys ? " is-panel" : ""}" id="field">
         ${S.showKeys ? `<div class="lab">${canFollowUp ? "Your reply" : "Your question"}</div>` : ""}
         <div class="mf-render" id="kbpreview"></div>
-        <input id="ask" type="text" class="mf-input" aria-label="${canFollowUp ? "Your reply" : "Your question"}"
+        <input id="ask" type="text" class="mf-input" autocomplete="off" aria-label="${canFollowUp ? "Your reply" : "Your question"}"
           placeholder="${canFollowUp ? "Type your answer or thinking here…" : "Ask a mathematics question"}"
           value="${esc(S.draft)}" ${S.busy ? "disabled" : ""}>
       </div>
@@ -6735,7 +7137,8 @@ function renderQuestions(el){
     stopSpeech(); S.messages = []; S.error = ""; S.speechError = "";
     S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false; S.rated = false;
     S.attemptPrompt = false; S.attemptError = "";
-    S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = ""; render();
+    S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = "";
+    S.mst = null; S.dijkstra = null; S.polydiv = null; S.polydivChoice = null; S.syndiv = null; S.riemann = null; render();
   };
   const ask = document.getElementById("ask"), send = document.getElementById("send");
   if (send){
@@ -6782,6 +7185,7 @@ function renderQuestions(el){
     S.intake = null; S.intakeEdit = false; S.hintTurns = 0; S.solved = false; S.rated = false;
     S.attemptPrompt = false; S.attemptError = "";
     S.studySummary = null; S.studySummaryBusy = false; S.studySummaryError = "";
+    S.mst = null; S.dijkstra = null; S.polydiv = null; S.polydivChoice = null; S.syndiv = null; S.riemann = null;
     render(); backToAsk();
   });
   wire("explain", () => submit(FOLLOW_UPS.explain, false));
@@ -6881,8 +7285,8 @@ async function submit(text, visible, shot, image, apiText){
   S.attemptPrompt = false; S.attemptError = "";
   render();
 
-  const system = [HOUSE_RULES, courseContext(S.courseKey), FIGURE_SPEC, TABLE_SPEC,
-                  ANSWER_SHAPE].join("\n\n");
+  const system = [HOUSE_RULES, courseContext(S.courseKey), FIGURE_SPEC, POLYDIVISION_SPEC,
+                  RIEMANNSUM_SPEC, TABLE_SPEC, ANSWER_SHAPE].join("\n\n");
   const payload = S.messages.map(m => {
     const t = m.apiText || m.content;
     return m.image
@@ -6905,12 +7309,73 @@ async function submit(text, visible, shot, image, apiText){
   }
   try {
     const reply = await callClaude(system, payload, 4000, "tutoring");
-    S.messages.push({ role:"assistant", content:reply });
-    S.hintTurns += 1;
-    const nowSolved = /^##\s*full solution/i.test(reply.trim());
-    S.solved = S.solved || nowSolved;
-    if (AS) AS.turns += 1;
-    if (nowSolved) analyticsEnd("solved");
+    const polyMatch = reply.match(/```polydivision\s*([\s\S]*?)```/);
+    const riemannMatch = !polyMatch && reply.match(/```riemannsum\s*([\s\S]*?)```/);
+    let startedPolyDiv = false;
+    let startedRiemann = false;
+    if (polyMatch){
+      // The fence is always stripped from what the student sees, whether or not it turns out to
+      // be usable — raw JSON left visible in a chat bubble is never useful, and a lead-in sentence
+      // before the fence is all that's meant to remain.
+      const cleaned = (reply.slice(0, polyMatch.index) + reply.slice(polyMatch.index + polyMatch[0].length)).trim();
+      S.messages.push({ role:"assistant", content: cleaned || "Let's work through this division step by step." });
+      try {
+        const parsed = JSON.parse(polyMatch[1].trim());
+        const dividend = (parsed.dividend || []).map(Number);
+        const divisor = (parsed.divisor || []).map(Number);
+        if (dividend.length >= 2 && dividend.every(isFinite) &&
+            divisor.length === 2 && divisor.every(isFinite) && divisor[0] !== 0 &&
+            dividend.length >= divisor.length){
+          // Synthetic division works for ANY linear divisor, not just a monic one (x-k) — for
+          // a leading coefficient other than 1, the standard technique still uses root=-b/a and
+          // the same multiply-and-add grid, then divides the resulting quotient row by a at the
+          // end (the remainder is unchanged) — so the method choice is offered every time, not
+          // gated on the divisor's leading coefficient.
+          S.polydivChoice = {
+            dividend: dividend.slice(), divisor: divisor.slice(),
+            questionText: text, questionShot: shot
+          };
+          startedPolyDiv = true;
+        }
+      } catch (parseErr){ /* malformed JSON from the model — fall through to normal chat below */ }
+    } else if (riemannMatch){
+      const cleaned = (reply.slice(0, riemannMatch.index) + reply.slice(riemannMatch.index + riemannMatch[0].length)).trim();
+      S.messages.push({ role:"assistant", content: cleaned || "Let's work through this step by step." });
+      try {
+        const parsed = JSON.parse(riemannMatch[1].trim());
+        const fx = String(parsed.fx || "");
+        const from = Number(parsed.from), to = Number(parsed.to), n = Math.round(Number(parsed.n));
+        const method = parsed.method;
+        const decimalPlaces = parsed.decimalPlaces !== undefined ? Math.round(Number(parsed.decimalPlaces)) : 3;
+        const validMethod = ["left", "right", "midpoint", "trapezoid"].includes(method);
+        if (fx && isFinite(from) && isFinite(to) && to > from && Number.isInteger(n) && n > 0 &&
+            validMethod && Number.isInteger(decimalPlaces) && decimalPlaces >= 0){
+          let compiled;
+          try { compiled = compile(fx); } catch (compileErr){ compiled = null; }
+          if (compiled){
+            S.riemann = {
+              fx, from, to, n, method, decimalPlaces,
+              confirmed: false,
+              checkFx: fx, checkFrom: from, checkTo: to, checkN: n, checkMethod: method, checkDecimalPlaces: decimalPlaces,
+              rows: [], phase: "x",
+              history: [], feedback: null, hinted: false, auto: [],
+              done: false, finalTotal: null,
+              questionText: text, questionShot: shot
+            };
+            startedRiemann = true;
+          }
+        }
+      } catch (parseErr){ /* malformed JSON from the model — fall through to normal chat below */ }
+    } else {
+      S.messages.push({ role:"assistant", content:reply });
+    }
+    if (!startedPolyDiv && !startedRiemann){
+      S.hintTurns += 1;
+      const nowSolved = /^##\s*full solution/i.test(reply.trim());
+      S.solved = S.solved || nowSolved;
+      if (AS) AS.turns += 1;
+      if (nowSolved) analyticsEnd("solved");
+    }
   } catch (err){
     S.error = err.message;
     S.messages.pop();
@@ -6968,6 +7433,151 @@ function networkConfirmText(network){
   }).join(", ");
   return `Confirmed network — use exactly this, not the diagram in the photo:\nVertices: ${vertexList}.\n`
     + (edgeList ? `Edges: ${edgeList}.` : "Edges: none.");
+}
+
+// Polynomial long division, one round at a time. `remainder` is always the coefficients for
+// powers [remainder.length-1, ..., 1, 0] — the array's own length is the single source of truth
+// for what power its first slot represents, never re-derived by searching for a first nonzero
+// entry. This matters because only the top divisor.length slots of `remainder` are ever touched
+// by a round, so a coincidental cancellation one level down is handled for free rather than
+// needing special-case detection.
+function polyRound6(n){
+  return Math.round((+n) * 1e6) / 1e6;
+}
+
+function riemannRound(v, dp){
+  const f = Math.pow(10, dp);
+  return Math.round((+v) * f) / f;
+}
+
+function riemannRoundCount(n, method){
+  return method === "trapezoid" ? n + 1 : n;
+}
+
+// i is 0-indexed. For trapezoid, i runs 0..n inclusive (every strip boundary); for the other three
+// methods, i runs 0..n-1 (one sample per strip).
+function riemannSampleX(from, width, i, method){
+  if (method === "right") return riemannRound(from + (i + 1) * width, 10);
+  if (method === "midpoint") return riemannRound(from + (i + 0.5) * width, 10);
+  return riemannRound(from + i * width, 10); // "left" and "trapezoid" share this formula
+}
+
+// heights is the confirmed array of f(x) values, in round order. width is (to-from)/n.
+function riemannTotal(heights, method, width){
+  if (method === "trapezoid"){
+    const first = heights[0], last = heights[heights.length - 1];
+    let middle = 0;
+    for (let i = 1; i < heights.length - 1; i++) middle += heights[i];
+    return riemannRound((width / 2) * (first + last + 2 * middle), 10);
+  }
+  const sum = heights.reduce((a, b) => a + b, 0);
+  return riemannRound(width * sum, 10);
+}
+
+function polyQuotientTerm(remainder, divisor){
+  const topPower = remainder.length - 1;
+  const divisorDegree = divisor.length - 1;
+  return { power: topPower - divisorDegree, coeff: polyRound6(remainder[0] / divisor[0]) };
+}
+
+function polyMultiplyRow(divisor, coeff){
+  return divisor.map(c => polyRound6(coeff * c));
+}
+
+// multiplyRow aligns with remainder's own top slots (indices 0..multiplyRow.length-1). Index 0
+// of the result is guaranteed to be exactly 0 by construction (that's the whole point of how the
+// quotient coefficient was chosen) and is dropped — the new remainder is one slot shorter than
+// the one it was computed from.
+function polySubtractRow(remainder, multiplyRow){
+  const topSlots = multiplyRow.map((m, i) => polyRound6(remainder[i] - m));
+  const tail = remainder.slice(multiplyRow.length);
+  return topSlots.slice(1).concat(tail);
+}
+
+function polyDivisionComplete(remainder, divisor){
+  return remainder.length <= divisor.length - 1;
+}
+
+// Renders a coefficient array (as returned by accumulating quotient terms, highest power first)
+// as a plain-text polynomial, e.g. [1,-1,-12] with topPower 2 -> "x^2-x-12". Used for the
+// completion summary text, not for any figure — FIG.polydivision recomputes its own rows directly
+// from the coefficient arrays instead of parsing this back.
+function polyTermsText(coeffs, topPower){
+  const parts = [];
+  coeffs.forEach((c, i) => {
+    if (c === 0) return;
+    const power = topPower - i;
+    const abs = Math.abs(c);
+    const sign = c < 0 ? "-" : (parts.length ? "+" : "");
+    let term;
+    if (power === 0) term = String(abs);
+    else if (power === 1) term = (abs === 1 ? "" : String(abs)) + "x";
+    else term = (abs === 1 ? "" : String(abs)) + "x^" + power;
+    parts.push(sign + term);
+  });
+  return parts.length ? parts.join("") : "0";
+}
+
+// Renders ONE term for display in its own bracket cell. This is deliberately NOT
+// polyTermsText([c], power) — that function decides whether to print a leading "+" by checking
+// whether it has already pushed an earlier term into the SAME array, which is always false for a
+// one-element array, so it silently drops the "+" on every positive term when called this way
+// (the exact bug report: no sign showing between x^3 and 2x^2). A cell rendered on its own has no
+// such history to check, so it needs to be told directly whether it's the first cell in its row.
+function polyCellText(c, power, isFirst){
+  const abs = Math.abs(c);
+  const sign = c < 0 ? "-" : (isFirst ? "" : "+");
+  let term;
+  if (power === 0) term = String(abs);
+  else if (power === 1) term = (abs === 1 ? "" : String(abs)) + "x";
+  else term = (abs === 1 ? "" : String(abs)) + "x^" + power;
+  return sign + term;
+}
+
+// Parses a single typed algebraic term ("-x^2", "2x", "-24", "x") into {power, coeff}, or returns
+// null if the text isn't a recognisable single term — the student is expected to type the WHOLE
+// term (sign, coefficient and power of x together), not just a bare coefficient, so an unparseable
+// entry is treated as its own distinct wrong-answer case from "right power, wrong coefficient".
+function parsePolyTerm(raw){
+  const s = String(raw).replace(/\s+/g, "");
+  if (!s) return null;
+  const m = s.match(/^([+-]?)(\d+(?:\.\d+)?)?(x)?(?:\^\{?(-?\d+)\}?)?$/i);
+  if (!m) return null;
+  const sign = m[1], numPart = m[2], xPart = m[3], powPart = m[4];
+  if (!xPart && powPart !== undefined) return null; // "^2" alone, with no x, makes no sense
+  if (!xPart && numPart === undefined) return null; // a bare "+"/"-"/"" with nothing else
+  const power = xPart ? (powPart !== undefined ? +powPart : 1) : 0;
+  const magnitude = numPart !== undefined ? +numPart : 1; // "x" alone means coefficient 1
+  return { power, coeff: (sign === "-" ? -1 : 1) * magnitude };
+}
+
+// Compares a parsed term against the correct power/coefficient for its box, returning null when
+// it's right or a specific message when it's wrong — distinguishing "couldn't read that as a
+// term" from "wrong power of x" from "right power, wrong coefficient", each needing a different
+// correction from the student.
+function polydivTermFeedback(parsed, expectedPower, expectedCoeff){
+  if (!parsed){
+    return "Type the whole term, e.g. \"-x^2\" or \"-24\" — a sign, a number, and (if there is one) the power of x, all together.";
+  }
+  if (parsed.power !== expectedPower){
+    return expectedPower === 0
+      ? "This box is the constant term — it shouldn't have an x in it."
+      : `That's a different power of x than belongs in this box — this one needs an x${expectedPower === 1 ? "" : "^" + expectedPower} term.`;
+  }
+  if (parsed.coeff !== expectedCoeff){
+    return "Right power of x, but the coefficient isn't right — check the arithmetic.";
+  }
+  return null;
+}
+
+// A cheap, always-in-sync live preview as the student types raw notation ("-x^2") — converts "^N"
+// to real Unicode superscript digits ("-x²") without needing a KaTeX typesetting pass on
+// every keystroke, which would otherwise mean re-typesetting on each character typed.
+const SUPERSCRIPT_DIGITS = { "0":"⁰","1":"¹","2":"²","3":"³","4":"⁴",
+  "5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹" };
+function polyTermPreview(raw){
+  return String(raw).replace(/\^\{?(-?\d+)\}?/g, (_, digits) =>
+    digits.split("").map(d => d === "-" ? "⁻" : (SUPERSCRIPT_DIGITS[d] || d)).join(""));
 }
 
 // A tiny disjoint-set (union-find) structure over vertex ids, used by Kruskal's algorithm to test
@@ -7080,6 +7690,1653 @@ function mstSummaryText(network, chosenIdx, autoIdx){
   return text;
 }
 
+// True if destination can actually be reached from start, respecting each edge's own direction —
+// Dijkstra's exercise can only ever finish if this holds.
+function dijkstraReachable(network, start, destination){
+  const adj = {};
+  network.vertices.forEach(v => { adj[v.id] = []; });
+  network.edges.forEach(e => {
+    if (!adj[e.from] || !adj[e.to]) return;
+    adj[e.from].push(e.to);
+    if (!e.directed) adj[e.to].push(e.from);
+  });
+  const seen = new Set([start]);
+  const stack = [start];
+  while (stack.length){
+    const cur = stack.pop();
+    (adj[cur] || []).forEach(n => { if (!seen.has(n)){ seen.add(n); stack.push(n); } });
+  }
+  return seen.has(destination);
+}
+
+// Finds the question's own named start/destination ("shortest path from A to F", "shortest route
+// between the waterfall (W) and the fern gully (F)") by looking inside a "from ... to ..." or
+// "between ... and ..." span for a token matching a real vertex label — never guesses when it
+// can't find both, since a silently wrong endpoint would be worse than not starting the exercise.
+function dijkstraEndpoints(network, fullQuestion){
+  const text = String(fullQuestion || "");
+  const labels = network.vertices.map(v => String(v.label));
+  if (!labels.length) return { start:null, destination:null };
+  const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const alt = labels.slice().sort((a, b) => b.length - a.length).map(escRe).join("|");
+  const tokenRe = new RegExp(`\\b(${alt})\\b`, "gi");
+  const spanMatch = text.match(/(?:from|between)\s+([\s\S]*?)\s+(?:to|and)\s+([\s\S]*?)(?:[.\n]|$)/i);
+  if (!spanMatch) return { start:null, destination:null };
+  const findLabel = span => {
+    const matches = span.match(tokenRe);
+    return matches ? matches[matches.length - 1] : null;
+  };
+  const startLabel = findLabel(spanMatch[1]), destLabel = findLabel(spanMatch[2]);
+  const byLabel = lbl => lbl && network.vertices.find(v => String(v.label).toLowerCase() === lbl.toLowerCase());
+  const a = byLabel(startLabel), b = byLabel(destLabel);
+  if (a && b && a.id !== b.id) return { start:a.id, destination:b.id };
+  return { start:null, destination:null };
+}
+
+// Recomputes every vertex's current tentative distance from scratch given which vertices have
+// been circled so far (in order) — relaxing only the edges leaving an already-circled vertex,
+// exactly Dijkstra's own rule. Recomputing fresh each time (rather than updating incrementally) is
+// simpler and just as correct, since relaxation only ever decreases a distance.
+function dijkstraDistances(network, circledIds){
+  const dist = {};
+  network.vertices.forEach(v => { dist[v.id] = Infinity; });
+  if (!circledIds.length) return dist;
+  dist[circledIds[0]] = 0;
+  circledIds.forEach(id => {
+    network.edges.forEach(e => {
+      let from = null, to = null;
+      if (e.from === id){ from = e.from; to = e.to; }
+      else if (e.to === id && !e.directed){ from = e.to; to = e.from; }
+      if (from === null) return;
+      const w = +e.weight;
+      if (dist[from] + w < dist[to]) dist[to] = dist[from] + w;
+    });
+  });
+  return dist;
+}
+
+// The valid next vertex/vertices to circle: whichever uncircled, reached (finite-distance)
+// vertices share the smallest current distance — ties allowed, matching "it does not matter which
+// one you circle" in the textbook's own working.
+function dijkstraValidChoices(network, circledIds){
+  const dist = dijkstraDistances(network, circledIds);
+  const circledSet = new Set(circledIds);
+  const candidates = network.vertices.filter(v => !circledSet.has(v.id) && isFinite(dist[v.id]));
+  const valid = new Set();
+  if (candidates.length){
+    const minDist = Math.min(...candidates.map(v => dist[v.id]));
+    candidates.forEach(v => { if (dist[v.id] === minDist) valid.add(v.id); });
+  }
+  const reasonFor = id => {
+    if (circledSet.has(id) || valid.has(id)) return null;
+    if (!isFinite(dist[id])) return "That vertex hasn't been reached yet — it needs an edge from a vertex that's already circled.";
+    return "There's a vertex with a smaller running distance available — circle that one first.";
+  };
+  return { valid, reasonFor, dist };
+}
+
+// True only if edge e can be walked FROM nbr INTO cur, respecting its own direction.
+function dijkstraEdgeStepsInto(e, nbr, cur){
+  if (e.from === nbr && e.to === cur) return true;
+  if (!e.directed && e.from === cur && e.to === nbr) return true;
+  return false;
+}
+
+// Every edge connecting the current backtrack cursor to an already-circled neighbour, respecting
+// each edge's own direction — the candidates the student chooses among at one backtrack step. Not
+// every candidate is actually correct: only the one whose neighbour's distance plus the edge's
+// weight equals the cursor's own distance is the true previous step in the shortest path.
+function dijkstraBacktrackCandidates(network, circledIds, cursor){
+  const circledSet = new Set(circledIds);
+  const candidates = [];
+  network.edges.forEach((e, i) => {
+    const nbr = e.from === cursor ? e.to : (e.to === cursor ? e.from : null);
+    if (nbr === null || nbr === cursor || !circledSet.has(nbr)) return;
+    if (!dijkstraEdgeStepsInto(e, nbr, cursor)) return;
+    candidates.push({ neighborId: nbr, edgeIndex: i, weight: +e.weight });
+  });
+  return candidates;
+}
+
+// A fixed, always-visible reminder of Dijkstra's own decision rule — teaches the process the same
+// way mstStepGuidance() does for Kruskal's/Prim's, never naming a specific vertex.
+function dijkstraStepGuidance(){
+  return "Look at every vertex connected to an already-circled vertex. Add the connecting edge's "
+    + "weight to that circled vertex's own distance, and type the result into that vertex's own box "
+    + "(press Enter to check it). Once a vertex's box is correct, you can circle it — but only "
+    + "whichever uncircled vertex now has the smallest running distance.";
+}
+
+// The always-visible reminder shown once the destination is circled and backtracking begins —
+// a different rule from the forward pass, so it gets its own guidance text.
+function dijkstraBacktrackGuidance(){
+  return "For each edge below, subtract its weight from the current vertex's own distance. If the "
+    + "result matches the OTHER vertex's own distance, that edge is the previous step in the "
+    + "shortest path — type the result in to check it.";
+}
+
+// After a vertex is circled, any OTHER uncircled vertex whose already-typed distance no longer
+// matches the freshly recomputed one has been overtaken by a cheaper route through the
+// newly-circled vertex. Nothing ever deletes a stale `entered` value on its own (only a fresh
+// correct re-entry overwrites it), so this just compares the two — the stale value stays sitting
+// in `entered` and is what the render function shows crossed out.
+function dijkstraSupersededList(network, circled, entered){
+  const dist = dijkstraDistances(network, circled);
+  const out = [];
+  network.vertices.forEach(v => {
+    if (circled.includes(v.id)) return;
+    const old = entered[v.id];
+    if (old !== undefined && Number.isFinite(dist[v.id]) && old !== dist[v.id]){
+      out.push({ id: v.id, label: v.label, oldVal: old, newVal: dist[v.id] });
+    }
+  });
+  return out;
+}
+
+function dijkstraSummaryText(network, path, finalDistance, autoIds){
+  const labelOf = id => { const v = network.vertices.find(v => v.id === id); return v ? v.label : id; };
+  const route = path.vertices.map(labelOf).join("-");
+  let text = `Shortest path: ${route}, length ${finalDistance}.`;
+  if (autoIds.length){
+    text += ` MathWISE circled ${autoIds.length} of the vertices for you when you got stuck.`;
+  }
+  return text;
+}
+
+// Builds the SAME division-bracket layout FIG.polydivision draws for a completed exercise, but
+// "live": rounds already confirmed are plain text stacked underneath the dividend exactly as a
+// student writes them by hand, and whichever value is currently being solved for is an editable
+// input embedded right there in the bracket (via foreignObject, the same technique the editable
+// network canvas and Dijkstra's own value boxes already use) instead of a separate flat list of
+// text and boxes below the diagram. Column width and font size here are deliberately much larger
+// than FIG.polydivision's own (a compact static answer figure) — this has to comfortably fit a
+// real <input>, not just a short text label.
+function polydivBracketBody(st){
+  const dividend = st.dividend, divisor = st.divisor, quotient = st.quotient;
+  const topPower = dividend.length - 1;
+  const divisorDegree = divisor.length - 1;
+  const fs = 15, colW = 60, x0 = 110;
+  const colX = power => x0 + (topPower - power) * colW;
+  const quotientY = 26, dividendY = 68, rowStep = 34;
+  const quotientPowerNow = st.remainder.length - 1 - divisorDegree;
+
+  // type="text" (not "number") because the student now types the WHOLE term (e.g. "-x^2"), not
+  // a bare coefficient — parsePolyTerm() reads it back at check time. Every cell also carries the
+  // shared "pdTermInput" class so the mini on-screen keyboard and live preview below the bracket
+  // can find and target whichever cell currently has focus, regardless of which phase it belongs to.
+  const inputBox = (cls, idx, x, y) => `<foreignObject x="${num(x - 27)}" y="${num(y - 13)}" width="54" height="26">
+    <input xmlns="http://www.w3.org/1999/xhtml" ${cls === "pdQuotientInput" ? `id="${cls}"` : `data-idx="${idx}"`}
+      class="pdTermInput ${cls === "pdQuotientInput" ? "" : cls}" type="text" inputmode="text"
+      placeholder="?" autocomplete="off" style="width:100%;height:100%;border:1px solid #C59F40;
+      border-radius:4px;text-align:center;font-size:13px;padding:1px"></foreignObject>`;
+
+  let rowsBody = "";
+
+  // Quotient row — confirmed terms as plain text; the term currently being solved for (if any)
+  // as an editable box in its place instead.
+  quotient.forEach((coeff, i) => {
+    const power = topPower - i - divisorDegree;
+    rowsBody += txt(colX(power), quotientY, polyCellText(coeff, power, i === 0),
+      { size: fs, weight: 600, fill: C_LINE });
+  });
+  if (!st.done && st.phase === "quotient"){
+    rowsBody += inputBox("pdQuotientInput", 0, colX(quotientPowerNow), quotientY);
+  }
+
+  // Dividend row — always fully known, never edited.
+  dividend.forEach((c, i) => {
+    rowsBody += txt(colX(topPower - i), dividendY, polyCellText(c, topPower - i, i === 0),
+      { size: fs, weight: 600, fill: C_INK });
+  });
+
+  // Every completed round, plain text, stacked downward exactly as written by hand.
+  let rowY = dividendY + rowStep;
+  st.rounds.forEach(r => {
+    r.multiplyRow.forEach((c, i) => {
+      rowsBody += txt(colX(r.startPower - i), rowY, polyCellText(c, r.startPower - i, i === 0),
+        { size: fs, weight: 600, fill: C_INK });
+    });
+    rowsBody += `<line x1="${num(colX(r.startPower) - colW / 2)}" y1="${num(rowY + fs * 0.5)}"
+      x2="${num(colX(r.startPower - r.multiplyRow.length + 1) + colW / 2)}" y2="${num(rowY + fs * 0.5)}"
+      stroke="${C_LINE}" stroke-width="1"/>`;
+    rowY += rowStep;
+    r.subtractRow.forEach((c, i) => {
+      rowsBody += txt(colX(r.startPower - 1 - i), rowY, polyCellText(c, r.startPower - 1 - i, i === 0),
+        { size: fs, weight: 600, fill: C_ALT });
+    });
+    rowY += rowStep;
+  });
+
+  // The round currently in progress — the multiply row is editable while phase is "multiply";
+  // once it's locked in (phase advances to "subtract"), it's redrawn as plain text here and the
+  // subtract row becomes the editable one.
+  if (!st.done && st.phase !== "quotient"){
+    const startPower = st.remainder.length - 1;
+    const coeff = quotient[quotient.length - 1];
+    if (st.phase === "multiply"){
+      for (let i = 0; i < divisor.length; i++) rowsBody += inputBox("pdMultiplyBox", i, colX(startPower - i), rowY);
+      rowsBody += `<line x1="${num(colX(startPower) - colW / 2)}" y1="${num(rowY + fs * 0.5)}"
+        x2="${num(colX(startPower - divisor.length + 1) + colW / 2)}" y2="${num(rowY + fs * 0.5)}"
+        stroke="${C_LINE}" stroke-width="1"/>`;
+      rowY += rowStep;
+    } else if (st.phase === "subtract"){
+      const multiplyRow = polyMultiplyRow(divisor, coeff);
+      multiplyRow.forEach((c, i) => {
+        rowsBody += txt(colX(startPower - i), rowY, polyCellText(c, startPower - i, i === 0),
+          { size: fs, weight: 600, fill: C_INK });
+      });
+      rowsBody += `<line x1="${num(colX(startPower) - colW / 2)}" y1="${num(rowY + fs * 0.5)}"
+        x2="${num(colX(startPower - multiplyRow.length + 1) + colW / 2)}" y2="${num(rowY + fs * 0.5)}"
+        stroke="${C_LINE}" stroke-width="1"/>`;
+      rowY += rowStep;
+      const boxCount = st.remainder.length - 1;
+      for (let i = 0; i < boxCount; i++) rowsBody += inputBox("pdSubtractBox", i, colX(startPower - 1 - i), rowY);
+      rowY += rowStep;
+    }
+  }
+
+  // The bracket itself, computed last now the final row position is known — an L-shaped rule
+  // exactly like FIG.shortdivision's own bracket, drawn first so it sits behind everything else.
+  const bracketX = x0 - colW / 2 - fs * 0.7, rightEdge = colX(0) + colW / 2 + fs * 0.5;
+  const topY = dividendY - fs * 1.6, bracketBottomY = rowY;
+  let body = `<path d="M ${num(bracketX)} ${num(bracketBottomY)} L ${num(bracketX)} ${num(topY)} L ${num(rightEdge)} ${num(topY)}"
+    fill="none" stroke="${C_LINE}" stroke-width="1.6"/>`;
+  body += txt(bracketX - fs * 2.4, dividendY, polyTermsText(divisor, 1), { size: fs, weight: 600, fill: C_LINE });
+  body += rowsBody;
+
+  const h = rowY + fs * 1.4;
+  return { body, h };
+}
+
+// Shown right after a polynomial-division question is detected, before either exercise starts —
+// both long division and synthetic division work for any linear divisor, so the choice is always
+// offered here rather than gated on the divisor's shape.
+function renderPolyDivChoice(el){
+  const ch = S.polydivChoice;
+  const questionHtml = `
+    <div class="msg user" style="margin-bottom:16px"><div class="who">?</div>
+      <div class="bubble">${ch.questionShot
+        ? `<img class="qshot" src="${ch.questionShot}" alt="A photo you shared with MathWISE">`
+        : "<p>" + esc(displayMathify(ch.questionText)) + "</p>"}</div></div>`;
+  el.innerHTML = `
+    ${questionHtml}
+    <h3 style="font-size:1.05rem">Which method would you like to use?</h3>
+    <p class="small">Long division works out the quotient row by row, keeping every term of x
+      visible throughout. Synthetic division tracks just the coefficients against the divisor's
+      root, in a shorter grid.</p>
+    <div class="row">
+      <button class="btn-primary" id="pdChooseLong" type="button">Long division</button>
+      <button class="btn-primary" id="pdChooseSynthetic" type="button">Synthetic division</button>
+    </div>`;
+  document.getElementById("pdChooseLong").onclick = () => {
+    S.polydiv = {
+      dividend: null, divisor: null, confirmed: false,
+      checkDividend: ch.dividend.slice(), checkDivisor: ch.divisor.slice(),
+      remainder: null, quotient: [], rounds: [], phase: "quotient",
+      history: [], feedback: null, hinted: false, auto: [],
+      done: false, finalQuotient: null, finalRemainder: null,
+      questionText: ch.questionText, questionShot: ch.questionShot
+    };
+    S.polydivChoice = null;
+    render();
+  };
+  document.getElementById("pdChooseSynthetic").onclick = () => {
+    S.syndiv = {
+      dividend: null, divisor: null, root: null, confirmed: false,
+      checkDividend: ch.dividend.slice(), checkDivisor: ch.divisor.slice(),
+      sums: [], col: 1, phase: "product", scaledQuotient: [],
+      history: [], feedback: null, hinted: false, auto: [],
+      done: false, finalQuotient: null, finalRemainder: null,
+      questionText: ch.questionText, questionShot: ch.questionShot
+    };
+    S.polydivChoice = null;
+    render();
+  };
+}
+
+// A confirm-then-solve exercise for polynomial long division: before round 1, the parsed
+// dividend/divisor are shown as editable coefficient boxes (the same "one box per coefficient"
+// component every later round also uses) so a misread digit — from either a photographed question
+// or the model's own reading of a typed one — gets caught before it corrupts every step after it.
+function renderPolyDivExercise(el){
+  const st = S.polydiv;
+  const questionHtml = `
+    <div class="msg user" style="margin-bottom:16px"><div class="who">?</div>
+      <div class="bubble">${st.questionShot
+        ? `<img class="qshot" src="${st.questionShot}" alt="A photo you shared with MathWISE">`
+        : "<p>" + esc(displayMathify(st.questionText)) + "</p>"}</div></div>`;
+
+  if (!st.confirmed){
+    const coeffBoxes = (arr, cls) => arr.map((c, i) =>
+      `<input type="number" class="${cls}" data-idx="${i}" value="${num(c)}"
+        style="width:52px;border:1px solid #C59F40;border-radius:4px;text-align:center;padding:4px;margin:0 3px">`
+    ).join("");
+    el.innerHTML = `
+      ${questionHtml}
+      <h3 style="font-size:1.05rem">Check the numbers before we start</h3>
+      <p class="small">MathWISE read this division as the numbers below (highest power of x first,
+        left to right). Fix any box that's wrong, then press Start.</p>
+      <p class="small" style="font-weight:600">Dividend coefficients:</p>
+      <div class="row" style="flex-wrap:wrap">${coeffBoxes(st.checkDividend, "pdCheckDividend")}</div>
+      <p class="small" style="font-weight:600;margin-top:10px">Divisor coefficients (a*x + b):</p>
+      <div class="row" style="flex-wrap:wrap">${coeffBoxes(st.checkDivisor, "pdCheckDivisor")}</div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn-primary" id="pdStart" type="button">Start</button>
+      </div>`;
+    document.querySelectorAll(".pdCheckDividend").forEach(inp => {
+      inp.oninput = () => { st.checkDividend[+inp.dataset.idx] = +inp.value || 0; };
+    });
+    document.querySelectorAll(".pdCheckDivisor").forEach(inp => {
+      inp.oninput = () => { st.checkDivisor[+inp.dataset.idx] = +inp.value || 0; };
+    });
+    document.getElementById("pdStart").onclick = polydivConfirmStart;
+    return;
+  }
+
+  if (st.done){
+    el.innerHTML = questionHtml + polydivDoneHtml();
+    polydivWireDone();
+    return;
+  }
+
+  const { power: quotientPower } = polyQuotientTerm(st.remainder, st.divisor);
+
+  let phaseText = "";
+  if (st.phase === "quotient"){
+    phaseText = `Divide the remainder's leading term by the divisor's leading term to find the
+      next quotient term — type the WHOLE term (e.g. "-x^${quotientPower}"), not just its number,
+      into the box above the bracket in the x^${quotientPower} column.`;
+  } else if (st.phase === "multiply"){
+    phaseText = `Multiply every term of the divisor by the quotient term you just found
+      (${esc(polyTermsText([st.quotient[st.quotient.length - 1]], quotientPower))}) — type each
+      WHOLE term of the result into the row below the dividend, highest power of x first.`;
+  } else if (st.phase === "subtract"){
+    phaseText = `Subtract the row above from the remainder, lining up matching powers of x, and
+      carry down every term that's left — type each WHOLE term of the result into the next row,
+      highest power of x first.`;
+  }
+
+  const bracket = polydivBracketBody(st);
+  el.innerHTML = questionHtml + `
+    <h3 style="font-size:1.05rem">Applying polynomial long division</h3>
+    <p class="small">${phaseText}</p>
+    <svg id="pdBracketSvg" viewBox="0 0 ${W} ${num(bracket.h)}" xmlns="http://www.w3.org/2000/svg"
+      style="width:100%;max-width:640px;height:auto">${bracket.body}</svg>
+    <p class="small">You're typing: <strong id="pdTermPreview"></strong></p>
+    ${polydivKeyboardHtml()}
+    <p id="pdFeedback" class="${st.feedback && st.feedback.kind === "error" ? "err" : "small"}">
+      ${st.feedback ? esc(st.feedback.text) : ""}</p>
+    <div class="row">
+      <button class="btn-secondary" id="pdHint" type="button">Hint</button>
+      <button class="btn-quiet" id="pdStep" type="button">I'm stuck — show me this step</button>
+      <button class="btn-quiet" id="pdUndo" type="button" ${st.history.length ? "" : "disabled"}>Undo</button>
+    </div>`;
+
+  document.querySelectorAll(".pdTermInput").forEach(box => {
+    box.onfocus = () => polydivUpdatePreview(box);
+    box.oninput = () => polydivUpdatePreview(box);
+  });
+  // Tab/Enter both move on to the next box (or trigger the check, on the row's last box) instead
+  // of relying on default Tab traversal — these inputs sit inside SVG foreignObjects, and every
+  // render() rebuilds the DOM from scratch with nothing focused, so without this the student has
+  // to click every single box by hand. The active box is also explicitly focused right here so the
+  // very first box of a new phase is ready to type into without a click, too.
+  if (st.phase === "quotient"){
+    const inp = document.getElementById("pdQuotientInput");
+    inp.onblur = () => polydivCheckQuotient(inp);
+    inp.onkeydown = e => { if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); polydivCheckQuotient(inp); } };
+    inp.focus();
+  } else if (st.phase === "multiply"){
+    const boxes = [...document.querySelectorAll(".pdMultiplyBox")];
+    boxes.forEach((box, i) => {
+      box.onblur = polydivCheckMultiplyRow;
+      box.onkeydown = e => {
+        if (e.key !== "Enter" && e.key !== "Tab") return;
+        e.preventDefault();
+        const next = boxes[i + 1];
+        if (next) next.focus(); else polydivCheckMultiplyRow();
+      };
+    });
+    if (boxes[0]) boxes[0].focus();
+  } else if (st.phase === "subtract"){
+    const boxes = [...document.querySelectorAll(".pdSubtractBox")];
+    boxes.forEach((box, i) => {
+      box.onblur = polydivCheckSubtractRow;
+      box.onkeydown = e => {
+        if (e.key !== "Enter" && e.key !== "Tab") return;
+        e.preventDefault();
+        const next = boxes[i + 1];
+        if (next) next.focus(); else polydivCheckSubtractRow();
+      };
+    });
+    if (boxes[0]) boxes[0].focus();
+  }
+  // preventDefault on mousedown is what stops a key press from ever blurring the input it's
+  // meant to be typing into — the same pattern the editable network canvas's delete badge uses.
+  document.querySelectorAll("[data-pdkey]").forEach(b => {
+    b.onmousedown = e => e.preventDefault();
+    b.onclick = () => polydivInsertAtCursor(b.dataset.pdkey);
+  });
+  const minusBtn = document.getElementById("pdKbMinus");
+  if (minusBtn){ minusBtn.onmousedown = e => e.preventDefault(); minusBtn.onclick = () => polydivInsertAtCursor("-"); }
+  const backBtn = document.getElementById("pdKbBack");
+  if (backBtn){ backBtn.onmousedown = e => e.preventDefault(); backBtn.onclick = polydivBackspace; }
+  const clearBtn = document.getElementById("pdKbClear");
+  if (clearBtn){ clearBtn.onmousedown = e => e.preventDefault(); clearBtn.onclick = polydivClearInput; }
+  const hintBtn = document.getElementById("pdHint");
+  if (hintBtn) hintBtn.onclick = polydivShowHint;
+  const stepBtn = document.getElementById("pdStep");
+  if (stepBtn) stepBtn.onclick = polydivAutoStep;
+  const undoBtn = document.getElementById("pdUndo");
+  if (undoBtn) undoBtn.onclick = polydivUndo;
+}
+
+function polydivConfirmStart(){
+  const st = S.polydiv;
+  st.dividend = st.checkDividend.slice();
+  st.divisor = st.checkDivisor.slice();
+  st.remainder = st.dividend.slice();
+  st.rounds = [];
+  st.confirmed = true;
+  render();
+}
+
+// Snapshots everything that changes step to step, pushed before every state-changing action —
+// the same pattern proven across the Dijkstra's exercise's own history stack. `rounds` is
+// included so Undo also correctly erases a completed round's own rows from the visible bracket,
+// not just the algorithm's own remainder/quotient bookkeeping.
+function polydivPushHistory(){
+  const st = S.polydiv;
+  st.history.push({
+    remainder: st.remainder.slice(), quotient: st.quotient.slice(),
+    phase: st.phase, auto: st.auto.slice(), rounds: st.rounds.slice()
+  });
+}
+
+function polydivUndo(){
+  const st = S.polydiv;
+  if (!st || !st.history.length) return;
+  const prev = st.history.pop();
+  st.remainder = prev.remainder;
+  st.quotient = prev.quotient;
+  st.phase = prev.phase;
+  st.auto = prev.auto;
+  st.rounds = prev.rounds;
+  st.feedback = null;
+  st.done = false;
+  render();
+}
+
+// A wrong entry updates only the feedback line via a direct DOM write (never render()), so the
+// box the student is retyping in never loses focus — the same lesson as every other exercise's
+// value-checking this session.
+function polydivCheckQuotient(inputEl){
+  const st = S.polydiv;
+  if (!st || st.phase !== "quotient") return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const parsed = parsePolyTerm(raw);
+  const { power: expectedPower, coeff: expectedCoeff } = polyQuotientTerm(st.remainder, st.divisor);
+  const text = polydivTermFeedback(parsed, expectedPower, expectedCoeff);
+  if (!text){
+    polydivPushHistory();
+    st.quotient.push(expectedCoeff);
+    st.phase = "multiply";
+    st.feedback = null;
+    render();
+  } else {
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("pdFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+// Checks the whole multiply row together once every box has a value — a row's boxes each have one
+// definite correct value regardless of what's in the others, so partial-row checking would just
+// be noise. A wrong row leaves every box editable (nothing is cleared) and shows one message —
+// the FIRST wrong box found, left to right (matching how a student reads the row).
+function polydivCheckMultiplyRow(){
+  const st = S.polydiv;
+  if (!st || st.phase !== "multiply") return;
+  const boxes = [...document.querySelectorAll(".pdMultiplyBox")];
+  if (boxes.some(b => String(b.value).trim() === "")) return;
+  const coeff = st.quotient[st.quotient.length - 1];
+  const correct = polyMultiplyRow(st.divisor, coeff);
+  const startPower = st.remainder.length - 1;
+  let text = null;
+  boxes.forEach((b, i) => {
+    if (text) return;
+    text = polydivTermFeedback(parsePolyTerm(b.value), startPower - i, correct[i]);
+  });
+  if (!text){
+    polydivPushHistory();
+    st.phase = "subtract";
+    st.feedback = null;
+    render();
+  } else {
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("pdFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function polydivCheckSubtractRow(){
+  const st = S.polydiv;
+  if (!st || st.phase !== "subtract") return;
+  const boxes = [...document.querySelectorAll(".pdSubtractBox")];
+  if (boxes.some(b => String(b.value).trim() === "")) return;
+  const coeff = st.quotient[st.quotient.length - 1];
+  const correct = polySubtractRow(st.remainder, polyMultiplyRow(st.divisor, coeff));
+  const startPower = st.remainder.length - 2; // the subtract row starts one power below the remainder's own top
+  let text = null;
+  boxes.forEach((b, i) => {
+    if (text) return;
+    text = polydivTermFeedback(parsePolyTerm(b.value), startPower - i, correct[i]);
+  });
+  if (!text){
+    polydivPushHistory();
+    polydivAdvanceRound(correct);
+    render();
+  } else {
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("pdFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+// The subtract row's result becomes the new remainder. If its length has dropped to (or below)
+// the divisor's own degree, there's nothing left to divide — the exercise ends. Otherwise, start
+// the next round from the quotient phase.
+function polydivAdvanceRound(newRemainder){
+  const st = S.polydiv;
+  const startPower = st.remainder.length - 1;
+  const coeff = st.quotient[st.quotient.length - 1];
+  st.rounds.push({ multiplyRow: polyMultiplyRow(st.divisor, coeff), subtractRow: newRemainder, startPower });
+  st.remainder = newRemainder;
+  st.feedback = null;
+  if (polyDivisionComplete(st.remainder, st.divisor)){
+    st.done = true;
+    st.finalQuotient = st.quotient.slice();
+    st.finalRemainder = st.remainder[0];
+  } else {
+    st.phase = "quotient";
+  }
+}
+
+// A small, purpose-built key palette for typing a single algebraic term — not a reuse of the
+// app's main on-screen LaTeX keyboard, which drives one shared slot-based editor tied to the
+// question box (S.draft/#ask) and would need touching code used for typing everywhere else in the
+// app to generalise. This is deliberately narrow (digits, x, ^, sign, delete, clear) since that's
+// everything a single term ever needs, styled with the same .kb/.kb-grid/.kb-key classes as the
+// main keyboard for visual consistency.
+function polydivKeyboardHtml(){
+  const keys = ["0","1","2","3","4","5","6","7","8","9","x","^"];
+  return `
+    <div class="kb">
+      <div class="kb-grid">
+        ${keys.map(k => `<button class="kb-key" type="button" data-pdkey="${esc(k)}">${esc(k)}</button>`).join("")}
+      </div>
+      <div class="kb-edit">
+        <button class="btn-quiet" type="button" id="pdKbMinus">−</button>
+        <button class="btn-quiet" type="button" id="pdKbBack">Delete</button>
+        <button class="btn-quiet" type="button" id="pdKbClear">Clear</button>
+      </div>
+    </div>`;
+}
+
+// Inserts at the cursor of whichever pdTermInput currently has focus — mousedown's preventDefault
+// on every key (wired in renderPolyDivExercise) is what stops the input from ever actually losing
+// focus when a key is clicked, the same pattern the editable network canvas's delete badge uses.
+function polydivActiveTermInput(){
+  const el = document.activeElement;
+  return (el && el.classList && el.classList.contains("pdTermInput")) ? el : null;
+}
+
+function polydivUpdatePreview(el){
+  const prev = document.getElementById("pdTermPreview");
+  if (prev) prev.textContent = el && el.value ? polyTermPreview(el.value) : "";
+}
+
+function polydivInsertAtCursor(text){
+  const el = polydivActiveTermInput();
+  if (!el) return;
+  const start = el.selectionStart || 0, end = el.selectionEnd || 0;
+  el.setRangeText(text, start, end, "end");
+  polydivUpdatePreview(el);
+}
+
+function polydivBackspace(){
+  const el = polydivActiveTermInput();
+  if (!el) return;
+  const start = el.selectionStart || 0, end = el.selectionEnd || 0;
+  if (start === end && start > 0) el.setRangeText("", start - 1, start, "end");
+  else el.setRangeText("", start, end, "end");
+  polydivUpdatePreview(el);
+}
+
+function polydivClearInput(){
+  const el = polydivActiveTermInput();
+  if (!el) return;
+  el.value = "";
+  polydivUpdatePreview(el);
+}
+
+// Explains the CURRENT phase's rule without giving away the actual number — the same
+// non-answer-revealing convention as every other exercise this session.
+function polydivShowHint(){
+  const st = S.polydiv;
+  const texts = {
+    quotient: "Divide the remainder's leading term by the divisor's leading term.",
+    multiply: "Multiply every term of the divisor by the quotient term you just found.",
+    subtract: "Subtract the row above from the remainder, lining up matching powers of x, and carry down every term that's left."
+  };
+  st.feedback = { kind: "hint", text: texts[st.phase] };
+  render();
+}
+
+// Fills in the correct value(s) for the CURRENT phase only — one phase per press, exactly like
+// MST/Dijkstra's own auto-step never skips more than one real step at a time.
+function polydivAutoStep(){
+  const st = S.polydiv;
+  polydivPushHistory();
+  if (st.phase === "quotient"){
+    const { power, coeff } = polyQuotientTerm(st.remainder, st.divisor);
+    st.quotient.push(coeff);
+    st.phase = "multiply";
+    st.auto.push({ phase: "quotient", round: st.quotient.length });
+    st.feedback = { kind: "step", text: `The next quotient term is ${polyTermsText([coeff], power)}.` };
+  } else if (st.phase === "multiply"){
+    st.phase = "subtract";
+    st.auto.push({ phase: "multiply", round: st.quotient.length });
+    st.feedback = { kind: "step", text: "That row is the divisor multiplied by the quotient term you just found." };
+  } else if (st.phase === "subtract"){
+    const coeff = st.quotient[st.quotient.length - 1];
+    const newRemainder = polySubtractRow(st.remainder, polyMultiplyRow(st.divisor, coeff));
+    st.auto.push({ phase: "subtract", round: st.quotient.length });
+    polydivAdvanceRound(newRemainder);
+    st.feedback = { kind: "step", text: "That's the result of subtracting the row above from the remainder." };
+  }
+  render();
+}
+
+function polydivDoneHtml(){
+  const st = S.polydiv;
+  const topPower = st.dividend.length - 1;
+  const quotientText = polyTermsText(st.finalQuotient, topPower - (st.divisor.length - 1));
+  const dividendText = polyTermsText(st.dividend, topPower);
+  const divisorText = polyTermsText(st.divisor, 1);
+  // render() always calls typesetIn(root) after building the page, so $...$ here gets picked up
+  // by KaTeX the same way it would in any chat message — \div rather than the "÷" character,
+  // since KaTeX doesn't recognise that Unicode symbol on its own inside math mode.
+  const remainderLine = st.finalRemainder === 0
+    ? `Since the remainder is 0, $(${divisorText})$ is a factor of $(${dividendText})$.`
+    : `The remainder is $${st.finalRemainder}$.`;
+  // The same figure the completed exercise embeds into the chat transcript on Continue — shown
+  // here too so the completion screen itself already looks like the finished bracket, not just a
+  // text summary of it.
+  const bracketSvg = FIG.polydivision({ dividend: st.dividend, divisor: st.divisor, quotient: st.finalQuotient });
+  return `
+    <h3 style="font-size:1.05rem">✓ Complete</h3>
+    ${bracketSvg}
+    <p style="font-weight:600">$\\dfrac{${dividendText}}{${divisorText}} = ${quotientText}$${
+      st.finalRemainder !== 0 ? `, remainder $${st.finalRemainder}$` : ""}</p>
+    <p class="small">${remainderLine}</p>
+    <div class="row">
+      <button class="btn-primary" id="pdContinue" type="button">Continue</button>
+    </div>`;
+}
+
+function polydivWireDone(){
+  document.getElementById("pdContinue").onclick = polydivFinish;
+}
+
+// Called from the exercise's own "Continue" button — records the result into the chat transcript
+// and hands back to normal chat, kept separate from reaching done:true so the completion screen
+// stays up until the student is ready to move on (the same split mstFinish()/dijkstraFinish() use).
+function polydivFinish(){
+  const st = S.polydiv;
+  const topPower = st.dividend.length - 1;
+  const quotientText = polyTermsText(st.finalQuotient, topPower - (st.divisor.length - 1));
+  const dividendText = polyTermsText(st.dividend, topPower);
+  const divisorText = polyTermsText(st.divisor, 1);
+  const figureSpec = { type: "polydivision", dividend: st.dividend, divisor: st.divisor, quotient: st.finalQuotient };
+  const figureBlock = "```figure\n" + JSON.stringify(figureSpec) + "\n```";
+  // $...$ delimiters, same as every answer the model itself writes — markup() doesn't auto-wrap
+  // plain text into maths (that auto-mathify pass is specific to the student's OWN live typing
+  // preview). Shown as a fraction (\dfrac), the same shape the division question was posed in.
+  let summary = `$\\dfrac{${dividendText}}{${divisorText}} = ${quotientText}` +
+    (st.finalRemainder !== 0 ? `\\text{, remainder } ${st.finalRemainder}` : "") + "$.";
+  if (st.finalRemainder === 0) summary += ` Since the remainder is 0, $(${divisorText})$ is a factor of $(${dividendText})$.`;
+  if (st.auto.length){
+    summary += ` MathWISE filled in ${st.auto.length} of the steps for you.`;
+  }
+  S.messages.push({ role: "user", content: st.questionText, visible: true, shot: st.questionShot });
+  S.messages.push({ role: "assistant", content: `## Full solution\n\n${figureBlock}\n\n${summary}` });
+  S.solved = true;
+  analyticsEnd("solved");
+  S.polydiv = null;
+  render();
+}
+
+// Synthetic division: root = -b/a from the divisor a*x+b, then one multiply-and-add pass down the
+// dividend's coefficients — a single row of products and a single row of sums, rather than long
+// division's several rounds of quotient/multiply/subtract. Works for ANY linear divisor, not just
+// a monic one: for a leading coefficient other than 1, the sums row is the correct quotient for
+// (x-root), so it still needs dividing by that leading coefficient to give the quotient for the
+// ACTUAL divisor (a*x+b) — the remainder is unchanged either way. See the design note in submit()
+// where this method is offered alongside long division for the reasoning.
+// The root and the dividend's own top row are values the student has to work out and write down
+// themselves (find x where the divisor is 0; copy the dividend across) — this used to fill both in
+// automatically, which skipped the very first step of actually setting up the table by hand.
+function syndivConfirmStart(){
+  const st = S.syndiv;
+  st.dividend = st.checkDividend.slice();
+  st.divisor = st.checkDivisor.slice();
+  st.root = null;
+  st.products = [];
+  st.sums = [];
+  st.col = 1;
+  st.phase = "setup";
+  st.scaledQuotient = [];
+  st.confirmed = true;
+  render();
+}
+
+function syndivPushHistory(){
+  const st = S.syndiv;
+  st.history.push({
+    root: st.root, products: st.products.slice(), sums: st.sums.slice(), col: st.col, phase: st.phase,
+    scaledQuotient: st.scaledQuotient.slice(), auto: st.auto.slice()
+  });
+}
+
+function syndivUndo(){
+  const st = S.syndiv;
+  if (!st || !st.history.length) return;
+  const prev = st.history.pop();
+  st.root = prev.root;
+  st.products = prev.products;
+  st.sums = prev.sums;
+  st.col = prev.col;
+  st.phase = prev.phase;
+  st.scaledQuotient = prev.scaledQuotient;
+  st.auto = prev.auto;
+  st.feedback = null;
+  st.done = false;
+  render();
+}
+
+// Checks the root box and every top-row cell together, the same "whole row at once" pattern
+// syndivCheckScale already uses — setting up the table is one action, not a sequence of separate
+// per-cell steps.
+function syndivCheckSetup(){
+  const st = S.syndiv;
+  if (!st || st.phase !== "setup") return;
+  const rootEl = document.getElementById("synRootInput");
+  const cellEls = [...document.querySelectorAll(".synSetupBox")];
+  if (!rootEl || String(rootEl.value).trim() === "") return;
+  if (cellEls.some(b => String(b.value).trim() === "")) return;
+  const typedRoot = polyRound6(Number(rootEl.value));
+  const correctRoot = polyRound6(-st.divisor[1] / st.divisor[0]);
+  const typedCells = cellEls.map(b => polyRound6(Number(b.value)));
+  const rootOk = Number.isFinite(typedRoot) && typedRoot === correctRoot;
+  const cellsOk = typedCells.every((v, i) => Number.isFinite(v) && v === st.dividend[i]);
+  if (rootOk && cellsOk){
+    syndivPushHistory();
+    st.root = correctRoot;
+    st.sums = [st.dividend[0]]; // "bring down" the leading coefficient — not a step the student solves
+    st.products = [];
+    st.col = 1;
+    st.phase = "product";
+    st.feedback = null;
+    render();
+  } else {
+    const text = !rootOk
+      ? "Check the root — it's the value of x that makes the divisor equal to zero."
+      : "The top row should be a plain copy of the dividend's own coefficients, in order — check for a sign or a missing zero.";
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("synFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+// A wrong entry updates only the feedback line via a direct DOM write, never render() — the same
+// lesson as every other exercise's value-checking this session.
+function syndivCheckProduct(inputEl){
+  const st = S.syndiv;
+  if (!st || st.phase !== "product") return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const typed = polyRound6(Number(raw));
+  const correct = polyRound6(st.root * st.sums[st.col - 1]);
+  if (Number.isFinite(typed) && typed === correct){
+    syndivPushHistory();
+    st.products[st.col] = correct;
+    st.phase = "sum";
+    st.feedback = null;
+    render();
+  } else {
+    const text = "Not quite. Multiply the divisor's root by the previous column's sum.";
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("synFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function syndivCheckSum(inputEl){
+  const st = S.syndiv;
+  if (!st || st.phase !== "sum") return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const typed = polyRound6(Number(raw));
+  const correct = polyRound6(st.dividend[st.col] + st.products[st.col]);
+  if (Number.isFinite(typed) && typed === correct){
+    syndivPushHistory();
+    st.sums[st.col] = correct;
+    const n = st.dividend.length - 1;
+    if (st.col < n){
+      st.col += 1;
+      st.phase = "product";
+    } else if (st.divisor[0] !== 1){
+      st.phase = "scale";
+    } else {
+      st.done = true;
+      st.finalQuotient = st.sums.slice(0, -1);
+      st.finalRemainder = st.sums[n];
+    }
+    st.feedback = null;
+    render();
+  } else {
+    const text = "Not quite. Add this column's own dividend coefficient to the product above it.";
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("synFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function syndivCheckScale(){
+  const st = S.syndiv;
+  if (!st || st.phase !== "scale") return;
+  const n = st.dividend.length - 1;
+  const boxes = [...document.querySelectorAll(".synScaleBox")];
+  if (boxes.some(b => String(b.value).trim() === "")) return;
+  const typed = boxes.map(b => polyRound6(Number(b.value)));
+  const correct = st.sums.slice(0, n).map(s => polyRound6(s / st.divisor[0]));
+  if (typed.every((v, i) => v === correct[i])){
+    syndivPushHistory();
+    st.scaledQuotient = correct;
+    st.done = true;
+    st.finalQuotient = correct;
+    st.finalRemainder = st.sums[n];
+    st.feedback = null;
+    render();
+  } else {
+    const text = "Not quite. Divide each number in the bottom row by the divisor's leading coefficient.";
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("synFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function syndivShowHint(){
+  const st = S.syndiv;
+  const texts = {
+    setup: "The root is the value of x that makes the divisor equal to zero; then copy the dividend's own coefficients straight across the top row.",
+    product: "Multiply the divisor's root by the previous column's sum.",
+    sum: "Add this column's own dividend coefficient to the product directly above it.",
+    scale: "Divide each number in the bottom row by the divisor's leading coefficient."
+  };
+  st.feedback = { kind: "hint", text: texts[st.phase] };
+  render();
+}
+
+// Fills in the correct value for the CURRENT phase only — one phase per press, exactly like every
+// other exercise's auto-step this session.
+function syndivAutoStep(){
+  const st = S.syndiv;
+  syndivPushHistory();
+  const n = st.dividend.length - 1;
+  if (st.phase === "setup"){
+    st.root = polyRound6(-st.divisor[1] / st.divisor[0]);
+    st.sums = [st.dividend[0]];
+    st.products = [];
+    st.col = 1;
+    st.phase = "product";
+    st.auto.push({ phase: "setup" });
+    st.feedback = { kind: "step", text: `The root is ${st.root}, and the dividend's coefficients go straight across the top row.` };
+  } else if (st.phase === "product"){
+    const correct = polyRound6(st.root * st.sums[st.col - 1]);
+    st.products[st.col] = correct;
+    st.phase = "sum";
+    st.auto.push({ phase: "product", col: st.col });
+    st.feedback = { kind: "step", text: `The product is ${correct}.` };
+  } else if (st.phase === "sum"){
+    const correct = polyRound6(st.dividend[st.col] + st.products[st.col]);
+    st.sums[st.col] = correct;
+    st.auto.push({ phase: "sum", col: st.col });
+    if (st.col < n){
+      st.col += 1;
+      st.phase = "product";
+    } else if (st.divisor[0] !== 1){
+      st.phase = "scale";
+    } else {
+      st.done = true;
+      st.finalQuotient = st.sums.slice(0, -1);
+      st.finalRemainder = st.sums[n];
+    }
+    st.feedback = { kind: "step", text: `The sum is ${correct}.` };
+  } else if (st.phase === "scale"){
+    const correct = st.sums.slice(0, n).map(s => polyRound6(s / st.divisor[0]));
+    st.scaledQuotient = correct;
+    st.done = true;
+    st.finalQuotient = correct;
+    st.finalRemainder = st.sums[n];
+    st.auto.push({ phase: "scale" });
+    st.feedback = { kind: "step", text: "Each number in the bottom row divided by the leading coefficient." };
+  }
+  render();
+}
+
+// Renders the synthetic-division grid — root and vertical bar to the left, the dividend row,
+// the products row (each shifted one column right of the coefficient it came from), a rule, then
+// the sums row, and (only when the divisor's leading coefficient isn't 1) a final scaling row.
+// Confirmed cells are plain text; the one cell currently being solved for is a real <input>.
+function syndivGridBody(st){
+  const dividend = st.dividend, root = st.root, n = dividend.length - 1;
+  // Evenly spaced, same as FIG.syndivision's own reasoning: every column — dividend, product, and
+  // sum — has to stay in strict vertical alignment, including the setup row's own boxes, so a
+  // wider gap on just the remainder's column (tried earlier) threw every row's spacing off instead
+  // of just separating the remainder. colW is simply wider than before.
+  const fs = 15, colW = 72, x0 = 130;
+  const colX = i => x0 + i * colW;
+  // Same reasoning as FIG.syndivision's own row gap: a plain row-step of 34 never cleared txt()'s
+  // own text-box height (1.7*15=25.5px, split 17.55px above its y and 7.95px below it), so the
+  // rule between the product and sum rows was landing inside the sum row's own box — 39px leaves
+  // real clearance on both sides.
+  const rootY = 40, prodY = rootY + 39, sumY = prodY + 39, scaleY = sumY + 39;
+  const ruleY = prodY + fs;
+  const needsScale = st.divisor[0] !== 1;
+  const showScaleRow = needsScale && (st.phase === "scale" || st.done);
+
+  // type="text" (not "number") so there's no native up/down spinner cluttering a tiny cell — the
+  // same plain typing box the long-division bracket already uses; inputmode="decimal" still gets
+  // students a numeric-friendly keyboard on mobile without that spinner.
+  const inputBox = (cls, idx, x, y, id) => `<foreignObject x="${num(x - 27)}" y="${num(y - 13)}" width="54" height="26">
+    <input xmlns="http://www.w3.org/1999/xhtml" class="${cls}" ${id ? `id="${id}"` : `data-idx="${idx}"`}
+      type="text" inputmode="decimal" placeholder="?" autocomplete="off"
+      style="width:100%;height:100%;border:1px solid #C59F40;border-radius:4px;
+      text-align:center;font-size:13px;padding:1px"></foreignObject>`;
+
+  // barX/rootX are fixed pixel offsets, not fractions of colW: the root's input box is a fixed
+  // 54px wide regardless of column width, so a colW-proportional gap (the previous approach) drifts
+  // right along with colW and can land the bar line inside the box — as it did here once colW grew.
+  // 37px between rootX and barX covers the box's own half-width (27) plus a real margin.
+  const barX = x0 - 46, rootX = barX - 37, rightEdge = colX(n) + colW * 0.6;
+
+  const settingUp = st.phase === "setup";
+  let body = "";
+  // The root and the dividend's own top row are typed in by the student during "setup" — only
+  // once that's confirmed do they redraw as plain text like every other settled value.
+  if (settingUp){
+    body += inputBox("synRootBox", 0, rootX, rootY, "synRootInput");
+  } else {
+    body += txt(rootX, rootY, num(root), { size: fs, weight: 600, fill: C_LINE });
+  }
+  const barBottom = (showScaleRow ? scaleY : sumY) + fs * 0.9;
+  body += `<line x1="${num(barX)}" y1="${num(rootY - fs * 1.3)}" x2="${num(barX)}" y2="${num(barBottom)}"
+    stroke="${C_LINE}" stroke-width="1.6"/>`;
+
+  dividend.forEach((c, i) => {
+    if (settingUp){
+      body += inputBox("synSetupBox", i, colX(i), rootY);
+    } else {
+      body += txt(colX(i), rootY, num(c), { size: fs, weight: 600, fill: C_INK });
+    }
+  });
+
+  for (let i = 1; i <= n; i++){
+    if (st.products[i] !== undefined){
+      body += txt(colX(i), prodY, num(st.products[i]), { size: fs, weight: 600, fill: C_ALT });
+    } else if (i === st.col && st.phase === "product"){
+      body += inputBox("synProductBox", i, colX(i), prodY);
+    }
+  }
+
+  body += `<line x1="${num(barX)}" y1="${num(ruleY)}" x2="${num(rightEdge)}" y2="${num(ruleY)}"
+    stroke="${C_LINE}" stroke-width="1.3"/>`;
+  for (let i = 0; i <= n; i++){
+    if (st.sums[i] !== undefined){
+      body += txt(colX(i), sumY, num(st.sums[i]), { size: fs, weight: 600, fill: C_LINE });
+    } else if (i === st.col && st.phase === "sum"){
+      body += inputBox("synSumBox", i, colX(i), sumY);
+    }
+  }
+
+  if (showScaleRow){
+    body += txt(rootX, scaleY, "÷" + num(st.divisor[0]), { size: fs * 0.8, weight: 600, fill: C_ALT });
+    for (let i = 0; i < n; i++){
+      if (st.scaledQuotient[i] !== undefined){
+        body += txt(colX(i), scaleY, num(st.scaledQuotient[i]), { size: fs, weight: 600, fill: C_LINE });
+      } else {
+        body += inputBox("synScaleBox", i, colX(i), scaleY);
+      }
+    }
+    if (st.sums[n] !== undefined) body += txt(colX(n), scaleY, num(st.sums[n]), { size: fs, weight: 600, fill: C_ALT });
+  }
+
+  const h = (showScaleRow ? scaleY : sumY) + fs * 1.6;
+  return { body, h };
+}
+
+function renderSynDivExercise(el){
+  const st = S.syndiv;
+  const questionHtml = `
+    <div class="msg user" style="margin-bottom:16px"><div class="who">?</div>
+      <div class="bubble">${st.questionShot
+        ? `<img class="qshot" src="${st.questionShot}" alt="A photo you shared with MathWISE">`
+        : "<p>" + esc(displayMathify(st.questionText)) + "</p>"}</div></div>`;
+
+  if (!st.confirmed){
+    const coeffBoxes = (arr, cls) => arr.map((c, i) =>
+      `<input type="number" class="${cls}" data-idx="${i}" value="${num(c)}"
+        style="width:52px;border:1px solid #C59F40;border-radius:4px;text-align:center;padding:4px;margin:0 3px">`
+    ).join("");
+    el.innerHTML = `
+      ${questionHtml}
+      <h3 style="font-size:1.05rem">Check the numbers before we start</h3>
+      <p class="small">MathWISE read this division as the numbers below (highest power of x first,
+        left to right). Fix any box that's wrong, then press Start.</p>
+      <p class="small" style="font-weight:600">Dividend coefficients:</p>
+      <div class="row" style="flex-wrap:wrap">${coeffBoxes(st.checkDividend, "synCheckDividend")}</div>
+      <p class="small" style="font-weight:600;margin-top:10px">Divisor coefficients (a*x + b):</p>
+      <div class="row" style="flex-wrap:wrap">${coeffBoxes(st.checkDivisor, "synCheckDivisor")}</div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn-primary" id="synStart" type="button">Start</button>
+      </div>`;
+    document.querySelectorAll(".synCheckDividend").forEach(inp => {
+      inp.oninput = () => { st.checkDividend[+inp.dataset.idx] = +inp.value || 0; };
+    });
+    document.querySelectorAll(".synCheckDivisor").forEach(inp => {
+      inp.oninput = () => { st.checkDivisor[+inp.dataset.idx] = +inp.value || 0; };
+    });
+    document.getElementById("synStart").onclick = syndivConfirmStart;
+    return;
+  }
+
+  if (st.done){
+    el.innerHTML = questionHtml + syndivDoneHtml();
+    syndivWireDone();
+    return;
+  }
+
+  let phaseText = "";
+  if (st.phase === "setup"){
+    phaseText = `Set up the table: find the root of the divisor (the value of x that makes it 0) and
+      type it to the left of the line, then copy the dividend's own coefficients into the top row.`;
+  } else if (st.phase === "product"){
+    phaseText = `Multiply the divisor's root (${num(st.root)}) by the previous column's sum — type
+      the result into the products row.`;
+  } else if (st.phase === "sum"){
+    phaseText = `Add this column's own dividend coefficient to the product directly above it —
+      type the result into the bottom row.`;
+  } else if (st.phase === "scale"){
+    phaseText = `The divisor's leading coefficient isn't 1, so divide each number in the bottom
+      row by ${num(st.divisor[0])} to get the true quotient — type each result below.`;
+  }
+
+  const grid = syndivGridBody(st);
+  el.innerHTML = questionHtml + `
+    <h3 style="font-size:1.05rem">Applying synthetic division</h3>
+    <p class="small">${phaseText}</p>
+    <svg id="synGridSvg" viewBox="0 0 ${W} ${num(grid.h)}" xmlns="http://www.w3.org/2000/svg"
+      style="width:100%;max-width:640px;height:auto">${grid.body}</svg>
+    <p id="synFeedback" class="${st.feedback && st.feedback.kind === "error" ? "err" : "small"}">
+      ${st.feedback ? esc(st.feedback.text) : ""}</p>
+    <div class="row">
+      <button class="btn-secondary" id="synHint" type="button">Hint</button>
+      <button class="btn-quiet" id="synStep" type="button">I'm stuck — show me this step</button>
+      <button class="btn-quiet" id="synUndo" type="button" ${st.history.length ? "" : "disabled"}>Undo</button>
+    </div>`;
+
+  // Tab/Enter both move on to the next box (or trigger the check, on the row's last box) instead
+  // of relying on default Tab traversal — these inputs sit inside SVG foreignObjects, and every
+  // render() rebuilds the DOM from scratch with nothing focused, so without this the student has
+  // to click every single box by hand. The active box is also explicitly focused right here so the
+  // very first box of a new phase is ready to type into without a click, too.
+  if (st.phase === "setup"){
+    const boxes = [document.getElementById("synRootInput"), ...document.querySelectorAll(".synSetupBox")]
+      .filter(Boolean);
+    boxes.forEach((box, i) => {
+      box.onblur = syndivCheckSetup;
+      box.onkeydown = e => {
+        if (e.key !== "Enter" && e.key !== "Tab") return;
+        e.preventDefault();
+        const next = boxes[i + 1];
+        if (next) next.focus(); else syndivCheckSetup();
+      };
+    });
+    if (boxes[0]) boxes[0].focus();
+  } else if (st.phase === "product"){
+    const box = document.querySelector(".synProductBox");
+    if (box){
+      box.onblur = () => syndivCheckProduct(box);
+      box.onkeydown = e => { if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); syndivCheckProduct(box); } };
+      box.focus();
+    }
+  } else if (st.phase === "sum"){
+    const box = document.querySelector(".synSumBox");
+    if (box){
+      box.onblur = () => syndivCheckSum(box);
+      box.onkeydown = e => { if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); syndivCheckSum(box); } };
+      box.focus();
+    }
+  } else if (st.phase === "scale"){
+    const boxes = [...document.querySelectorAll(".synScaleBox")];
+    boxes.forEach((box, i) => {
+      box.onblur = syndivCheckScale;
+      box.onkeydown = e => {
+        if (e.key !== "Enter" && e.key !== "Tab") return;
+        e.preventDefault();
+        const next = boxes[i + 1];
+        if (next) next.focus(); else syndivCheckScale();
+      };
+    });
+    if (boxes[0]) boxes[0].focus();
+  }
+  const hintBtn = document.getElementById("synHint");
+  if (hintBtn) hintBtn.onclick = syndivShowHint;
+  const stepBtn = document.getElementById("synStep");
+  if (stepBtn) stepBtn.onclick = syndivAutoStep;
+  const undoBtn = document.getElementById("synUndo");
+  if (undoBtn) undoBtn.onclick = syndivUndo;
+}
+
+// Shown before round 1: the model's read of fx/from/to/n/method/decimalPlaces, editable in case a
+// photographed question was misread or a typed one was misinterpreted — the same "one box per
+// value" confirm pattern the division exercises already use, just applied to these five fields.
+function renderRiemannExercise(el){
+  const st = S.riemann;
+  const questionHtml = `
+    <div class="msg user" style="margin-bottom:16px"><div class="who">?</div>
+      <div class="bubble">${st.questionShot
+        ? `<img class="qshot" src="${st.questionShot}" alt="A photo you shared with MathWISE">`
+        : "<p>" + esc(displayMathify(st.questionText)) + "</p>"}</div></div>`;
+
+  if (!st.confirmed){
+    const methodBtn = m => `<button type="button" class="btn-quiet riemannMethodBtn"
+      data-method="${m}" style="${st.checkMethod === m ? "border-color:#4F2759;font-weight:600" : ""}">${esc(m)}</button>`;
+    el.innerHTML = `
+      ${questionHtml}
+      <h3 style="font-size:1.05rem">Check the numbers before we start</h3>
+      <p class="small">MathWISE read this question as the setup below. Fix anything that's wrong,
+        then press Start.</p>
+      <p class="small" style="font-weight:600">f(x) =</p>
+      <input id="riemannCheckFx" type="text" value="${esc(st.checkFx)}"
+        style="width:100%;max-width:320px;border:1px solid #C59F40;border-radius:4px;padding:6px">
+      <p class="small" style="font-weight:600;margin-top:10px">From x =</p>
+      <input id="riemannCheckFrom" type="text" value="${num(st.checkFrom)}"
+        style="width:80px;border:1px solid #C59F40;border-radius:4px;padding:6px">
+      <p class="small" style="font-weight:600;margin-top:10px">To x =</p>
+      <input id="riemannCheckTo" type="text" value="${num(st.checkTo)}"
+        style="width:80px;border:1px solid #C59F40;border-radius:4px;padding:6px">
+      <p class="small" style="font-weight:600;margin-top:10px">Number of strips (n) =</p>
+      <input id="riemannCheckN" type="text" value="${num(st.checkN)}"
+        style="width:80px;border:1px solid #C59F40;border-radius:4px;padding:6px">
+      <p class="small" style="font-weight:600;margin-top:10px">Method:</p>
+      <div class="row" style="flex-wrap:wrap">${["left","right","midpoint","trapezoid"].map(methodBtn).join("")}</div>
+      <p class="small" style="font-weight:600;margin-top:10px">Decimal places =</p>
+      <input id="riemannCheckDp" type="text" value="${num(st.checkDecimalPlaces)}"
+        style="width:80px;border:1px solid #C59F40;border-radius:4px;padding:6px">
+      ${st.feedback ? `<p id="riemannConfirmFeedback" class="${st.feedback.kind === "error" ? "err" : "small"}">${esc(st.feedback.text)}</p>` : ""}
+      <div class="row" style="margin-top:14px">
+        <button class="btn-primary" id="riemannStart" type="button">Start</button>
+      </div>`;
+    document.getElementById("riemannCheckFx").oninput = e => { st.checkFx = e.target.value; };
+    document.getElementById("riemannCheckFrom").oninput = e => { st.checkFrom = +e.target.value || 0; };
+    document.getElementById("riemannCheckTo").oninput = e => { st.checkTo = +e.target.value || 0; };
+    document.getElementById("riemannCheckN").oninput = e => { st.checkN = Math.round(+e.target.value) || 1; };
+    document.getElementById("riemannCheckDp").oninput = e => { st.checkDecimalPlaces = Math.max(0, Math.round(+e.target.value) || 0); };
+    document.querySelectorAll(".riemannMethodBtn").forEach(b => {
+      b.onclick = () => { st.checkMethod = b.dataset.method; render(); };
+    });
+    document.getElementById("riemannStart").onclick = riemannConfirmStart;
+    return;
+  }
+  if (st.done){
+    el.innerHTML = questionHtml + riemannDoneHtml();
+    riemannWireDone();
+    return;
+  }
+
+  const width = (st.to - st.from) / st.n;
+  const roundCount = riemannRoundCount(st.n, st.method);
+  // During "height" phase, the pending row (pushed by riemannCheckX with fx:null) already sits at
+  // rows.length-1, not rows.length — pendingIndex is the round actually in progress either way.
+  const pendingIndex = st.phase === "height" ? st.rows.length - 1 : st.rows.length;
+
+  let phaseText = "";
+  if (st.phase === "x"){
+    phaseText = st.method === "trapezoid"
+      ? "Trapezoidal estimates need the function's value at every strip boundary — type the next boundary's x-value."
+      : `This is a ${st.method} rectangle — type the sample x-value for strip ${pendingIndex + 1}.`;
+  } else if (st.phase === "height"){
+    phaseText = "Substitute that x-value into f(x) and type the result.";
+  } else {
+    phaseText = st.method === "trapezoid"
+      ? "Use the trapezoidal rule to combine every height into the total area estimate."
+      : "Multiply the common strip width by the sum of every height you found.";
+  }
+
+  // Only show rows whose height is already CONFIRMED — a still-pending row (fx:null) belongs in
+  // liveRowHtml below, not here, or it would display as if answered with height 0.
+  const confirmedRows = st.phase === "height" ? st.rows.slice(0, -1) : st.rows;
+  // Displayed to the exercise's OWN decimalPlaces, not num()'s hard-coded 2dp: the checkers compare
+  // against riemannRound(..., st.decimalPlaces), so anything else shows the student a number the
+  // app would then reject (e.g. x=0.125 shown as "0.13" at the default 3dp).
+  const rowsHtml = confirmedRows.map((r, idx) =>
+    `<tr><td>${idx + 1}</td><td>${riemannRound(r.x, st.decimalPlaces)}</td><td>${riemannRound(r.fx, st.decimalPlaces)}</td></tr>`).join("");
+  const liveRowHtml = pendingIndex < roundCount
+    ? (st.phase === "x"
+        ? `<tr><td>${pendingIndex + 1}</td><td><input id="riemannXInput" type="text" inputmode="decimal"
+             autocomplete="off" style="width:70px;border:1px solid #C59F40;border-radius:4px;padding:4px"></td><td>?</td></tr>`
+        : `<tr><td>${pendingIndex + 1}</td><td>${riemannRound(st.rows[pendingIndex].x, st.decimalPlaces)}</td>
+             <td><input id="riemannHeightInput" type="text" inputmode="decimal" autocomplete="off"
+             style="width:70px;border:1px solid #C59F40;border-radius:4px;padding:4px"></td></tr>`)
+    : "";
+
+  const diagram = riemannBody(st);
+  el.innerHTML = questionHtml + `
+    <h3 style="font-size:1.05rem">Estimating the area</h3>
+    <p class="small">${phaseText}</p>
+    <p style="font-weight:600">$f(x)=${exprToLatex(st.fx)}$</p>
+    <svg viewBox="0 0 ${W} ${num(diagram.h)}" xmlns="http://www.w3.org/2000/svg"
+      style="width:100%;max-width:640px;height:auto">${diagram.body}</svg>
+    <table class="mw-table"><thead><tr><th>${st.method === "trapezoid" ? "Point" : "Strip"}</th><th>x</th><th>f(x)</th></tr></thead>
+      <tbody>${rowsHtml}${liveRowHtml}</tbody></table>
+    ${st.phase === "total"
+      ? `<p class="small">Total area estimate: <input id="riemannTotalInput" type="text" inputmode="decimal"
+           autocomplete="off" style="width:100px;border:1px solid #C59F40;border-radius:4px;padding:4px"></p>`
+      : ""}
+    <p id="riemannFeedback" class="${st.feedback && st.feedback.kind === "error" ? "err" : "small"}">
+      ${st.feedback ? esc(st.feedback.text) : ""}</p>
+    <div class="row">
+      <button class="btn-secondary" id="riemannHint" type="button">Hint</button>
+      <button class="btn-quiet" id="riemannStep" type="button">I'm stuck — show me this step</button>
+      <button class="btn-quiet" id="riemannUndo" type="button" ${st.history.length ? "" : "disabled"}>Undo</button>
+    </div>`;
+
+  if (st.phase === "x"){
+    const box = document.getElementById("riemannXInput");
+    if (box){
+      box.onblur = () => riemannCheckX(box);
+      box.onkeydown = e => { if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); riemannCheckX(box); } };
+      box.focus();
+    }
+  } else if (st.phase === "height"){
+    const box = document.getElementById("riemannHeightInput");
+    if (box){
+      box.onblur = () => riemannCheckHeight(box);
+      box.onkeydown = e => { if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); riemannCheckHeight(box); } };
+      box.focus();
+    }
+  } else if (st.phase === "total"){
+    const box = document.getElementById("riemannTotalInput");
+    if (box){
+      box.onblur = () => riemannCheckTotal(box);
+      box.onkeydown = e => { if (e.key === "Enter" || e.key === "Tab"){ e.preventDefault(); riemannCheckTotal(box); } };
+      box.focus();
+    }
+  }
+  const hintBtn = document.getElementById("riemannHint");
+  if (hintBtn) hintBtn.onclick = riemannShowHint;
+  const stepBtn = document.getElementById("riemannStep");
+  if (stepBtn) stepBtn.onclick = riemannAutoStep;
+  const undoBtn = document.getElementById("riemannUndo");
+  if (undoBtn) undoBtn.onclick = riemannUndo;
+}
+
+// The edited boxes are re-validated HERE, not just when the model first proposed them: once
+// confirmed is true with an f(x) that won't compile (or n <= 0, or to <= from), every later
+// render() throws inside riemannBody and the whole Questions tab goes permanently blank, with only
+// the app-wide "Start over" (which discards the conversation) to recover.
+function riemannConfirmStart(){
+  const st = S.riemann;
+  let compiledOk = false;
+  try { compiledOk = isFinite(compile(st.checkFx)(st.checkFrom)); } catch (e){ compiledOk = false; }
+  if (!compiledOk || !(st.checkTo > st.checkFrom) || !(st.checkN > 0)){
+    st.feedback = { kind: "error", text: "Check f(x), the interval, and the number of strips — MathWISE can't read that setup." };
+    render();
+    return;
+  }
+  st.fx = st.checkFx;
+  st.from = st.checkFrom;
+  st.to = st.checkTo;
+  st.n = st.checkN;
+  st.method = st.checkMethod;
+  st.decimalPlaces = st.checkDecimalPlaces;
+  st.rows = [];
+  st.phase = "x";
+  st.confirmed = true;
+  st.feedback = null;
+  render();
+}
+
+// The read-only picture: the curve plus a filled rectangle/trapezium for every FULLY confirmed
+// strip, and a dashed guide line at the CURRENT round's x-value once it's known. Unlike the
+// division exercises' brackets, nothing here is an editable input — the actual typing happens in
+// the plain HTML table below the diagram (see renderRiemannExercise), which is a much simpler and
+// more robust home for text boxes than an SVG foreignObject, and this diagram has no natural
+// "column" layout to embed them into anyway.
+function riemannBody(st){
+  const f = compile(st.fx);
+  const width = (st.to - st.from) / st.n;
+  const margin = width;
+  const xmin = st.from - margin, xmax = st.to + margin;
+  const vals = [];
+  for (let k = 0; k <= 200; k++){
+    const y = f(xmin + (xmax - xmin) * k / 200);
+    if (isFinite(y)) vals.push(y);
+  }
+  if (!vals.length) vals.push(0, 1);
+  vals.sort((a, b) => a - b);
+  const lo = vals[Math.floor(vals.length * 0.02)], hi = vals[Math.floor(vals.length * 0.98)];
+  const pad = Math.max((hi - lo) * 0.12, 0.5);
+  const ymin = Math.min(lo - pad, 0), ymax = Math.max(hi + pad, 0);
+
+  const ax = axes(xmin, xmax, ymin, ymax, "x", "y");
+  const { X, Y } = ax;
+  let body = ax.g;
+
+  let d = "", pen = false;
+  for (let k = 0; k <= 300; k++){
+    const x = xmin + (xmax - xmin) * k / 300, y = f(x);
+    if (!isFinite(y)){ pen = false; continue; }
+    d += (pen ? "L" : "M") + num(X(x)) + " " + num(Y(y)) + " ";
+    pen = true;
+  }
+  body += `<path d="${d}" fill="none" stroke="${C_LINE}" stroke-width="2.2"/>`;
+
+  const clamp = v => Math.max(ymin, Math.min(ymax, v));
+  const strip = (x0, x1, h) => {
+    const y = clamp(h);
+    return `<path d="M ${num(X(x0))} ${num(Y(0))} L ${num(X(x0))} ${num(Y(y))}
+      L ${num(X(x1))} ${num(Y(y))} L ${num(X(x1))} ${num(Y(0))} Z"
+      fill="${C_FILL}" fill-opacity="0.22" stroke="${C_LINE}" stroke-width="1"/>`;
+  };
+  const trapezium = (x0, x1, h0, h1) => {
+    const y0 = clamp(h0), y1 = clamp(h1);
+    return `<path d="M ${num(X(x0))} ${num(Y(0))} L ${num(X(x0))} ${num(Y(y0))}
+      L ${num(X(x1))} ${num(Y(y1))} L ${num(X(x1))} ${num(Y(0))} Z"
+      fill="${C_FILL}" fill-opacity="0.22" stroke="${C_LINE}" stroke-width="1"/>`;
+  };
+
+  // Exclude a still-pending row (fx:null, awaiting its height) from what gets drawn as a settled
+  // strip/trapezium — only the last row can ever be pending, since a row's fx is always filled in
+  // before the next round's x is pushed.
+  const confirmedCount = (st.rows.length && st.rows[st.rows.length - 1].fx === null)
+    ? st.rows.length - 1 : st.rows.length;
+  if (st.method === "trapezoid"){
+    for (let i = 1; i < confirmedCount; i++){
+      const x0 = riemannSampleX(st.from, width, i - 1, st.method);
+      const x1 = riemannSampleX(st.from, width, i, st.method);
+      body += trapezium(x0, x1, st.rows[i - 1].fx, st.rows[i].fx);
+    }
+  } else {
+    for (let i = 0; i < confirmedCount; i++){
+      const x0 = st.from + i * width, x1 = x0 + width;
+      body += strip(x0, x1, st.rows[i].fx);
+    }
+  }
+
+  // The strip currently being worked on: a dashed guide at its x, once that x is confirmed.
+  if (!st.done && st.phase === "height"){
+    const i = st.rows.length - 1;
+    const x = st.rows[i].x;
+    body += `<line x1="${num(X(x))}" y1="${ax.T}" x2="${num(X(x))}" y2="${num(H - ax.B)}"
+      stroke="${C_ALT}" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+  }
+
+  return { body, h: H };
+}
+
+function riemannPushHistory(){
+  const st = S.riemann;
+  st.history.push({ rows: st.rows.map(r => ({ x: r.x, fx: r.fx })), phase: st.phase, auto: st.auto.slice() });
+}
+
+function riemannUndo(){
+  const st = S.riemann;
+  if (!st || !st.history.length) return;
+  const prev = st.history.pop();
+  st.rows = prev.rows;
+  st.phase = prev.phase;
+  st.auto = prev.auto;
+  st.feedback = null;
+  st.done = false;
+  render();
+}
+
+function riemannCheckTotal(inputEl){
+  const st = S.riemann;
+  if (!st || st.phase !== "total") return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const width = (st.to - st.from) / st.n;
+  const heights = st.rows.map(r => r.fx);
+  const correct = riemannTotal(heights, st.method, width);
+  const typed = riemannRound(Number(raw), st.decimalPlaces);
+  const correctRounded = riemannRound(correct, st.decimalPlaces);
+  if (Number.isFinite(typed) && typed === correctRounded){
+    riemannPushHistory();
+    st.finalTotal = correct;
+    st.done = true;
+    st.feedback = null;
+    render();
+  } else {
+    const text = st.method === "trapezoid"
+      ? "Not quite. Use the trapezoidal rule: half the strip width times (the first height, plus the last height, plus twice every height in between)."
+      : "Not quite. Multiply the common strip width by the sum of every height you found.";
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("riemannFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function riemannShowHint(){
+  const st = S.riemann;
+  let text;
+  if (st.phase === "x"){
+    text = st.method === "trapezoid"
+      ? "Trapezoidal estimates need the function's value at every strip boundary — this is one of those boundaries."
+      : st.method === "left" ? "This is a left rectangle, so use the LEFT edge of this strip as x."
+      : st.method === "right" ? "This is a right rectangle, so use the RIGHT edge of this strip as x."
+      : "This is a midpoint rectangle, so use the MIDDLE of this strip as x.";
+  } else if (st.phase === "height"){
+    text = "Substitute that x-value into f(x).";
+  } else {
+    text = st.method === "trapezoid"
+      ? "Use the trapezoidal rule: half the strip width times (the first height, plus the last height, plus twice every height in between)."
+      : "Multiply the common strip width by the sum of every height you found.";
+  }
+  st.feedback = { kind: "hint", text };
+  render();
+}
+
+// Fills in the correct value for the CURRENT phase only, one phase per press — the same
+// "advance exactly one step" convention every prior exercise's auto-step uses.
+function riemannAutoStep(){
+  const st = S.riemann;
+  riemannPushHistory();
+  const width = (st.to - st.from) / st.n;
+  if (st.phase === "x"){
+    const i = st.rows.length;
+    const correct = riemannSampleX(st.from, width, i, st.method);
+    st.rows.push({ x: correct, fx: null });
+    st.phase = "height";
+    st.auto.push({ phase: "x", round: i });
+    st.feedback = { kind: "step", text: `The x-value for this strip is ${riemannRound(correct, st.decimalPlaces)}.` };
+  } else if (st.phase === "height"){
+    const f = compile(st.fx);
+    const i = st.rows.length - 1;
+    const correct = f(st.rows[i].x);
+    st.rows[i].fx = correct;
+    st.phase = st.rows.length < riemannRoundCount(st.n, st.method) ? "x" : "total";
+    st.auto.push({ phase: "height", round: i });
+    st.feedback = { kind: "step", text: `f(${riemannRound(st.rows[i].x, st.decimalPlaces)}) = ${riemannRound(correct, st.decimalPlaces)}.` };
+  } else {
+    const heights = st.rows.map(r => r.fx);
+    const correct = riemannTotal(heights, st.method, width);
+    st.finalTotal = correct;
+    st.done = true;
+    st.auto.push({ phase: "total" });
+    st.feedback = { kind: "step", text: `The total area estimate is ${riemannRound(correct, st.decimalPlaces)}.` };
+  }
+  render();
+}
+
+function riemannDoneHtml(){
+  const st = S.riemann;
+  const methodLabel = st.method === "trapezoid" ? "the trapezoidal rule"
+    : `${st.n} ${st.method} rectangles`;
+  const diagram = riemannBody(st);
+  return `
+    <h3 style="font-size:1.05rem">✓ Complete</h3>
+    <svg viewBox="0 0 ${W} ${num(diagram.h)}" xmlns="http://www.w3.org/2000/svg"
+      style="width:100%;max-width:640px;height:auto">${diagram.body}</svg>
+    <p style="font-weight:600">Using ${methodLabel}, the area under $f(x)=${exprToLatex(st.fx)}$ from
+      $x=${num(st.from)}$ to $x=${num(st.to)}$ is approximately $${riemannRound(st.finalTotal, st.decimalPlaces)}$.</p>
+    <div class="row">
+      <button class="btn-primary" id="riemannContinue" type="button">Continue</button>
+    </div>`;
+}
+
+function riemannWireDone(){
+  document.getElementById("riemannContinue").onclick = riemannFinish;
+}
+
+// Called from the exercise's own "Continue" button — records the result into the chat transcript
+// and hands back to normal chat. The completion figure reuses the EXISTING FIG.plot/riemann code
+// path exactly as it already exists (no new figure type), per the spec.
+function riemannFinish(){
+  const st = S.riemann;
+  const width = (st.to - st.from) / st.n;
+  const methodLabel = st.method === "trapezoid" ? "the trapezoidal rule"
+    : `${st.n} ${st.method} rectangles`;
+  const figureSpec = {
+    type: "plot", xmin: st.from - width, xmax: st.to + width,
+    curves: [{ expr: st.fx }],
+    riemann: [{ curve: 0, from: st.from, to: st.to, n: st.n, method: st.method }]
+  };
+  const figureBlock = "```figure\n" + JSON.stringify(figureSpec) + "\n```";
+  let summary = `Using ${methodLabel}, the area under $f(x)=${exprToLatex(st.fx)}$ from $x=${num(st.from)}$` +
+    ` to $x=${num(st.to)}$ is approximately $${riemannRound(st.finalTotal, st.decimalPlaces)}$.`;
+  if (st.auto.length) summary += ` MathWISE filled in ${st.auto.length} of the steps for you.`;
+  S.messages.push({ role: "user", content: st.questionText, visible: true, shot: st.questionShot });
+  S.messages.push({ role: "assistant", content: `## Full solution\n\n${figureBlock}\n\n${summary}` });
+  S.solved = true;
+  analyticsEnd("solved");
+  S.riemann = null;
+  render();
+}
+
+// A wrong entry updates only the feedback line via a direct DOM write, never render() — the same
+// focus-preserving rule every prior exercise this session follows.
+function riemannCheckX(inputEl){
+  const st = S.riemann;
+  if (!st || st.phase !== "x") return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const width = (st.to - st.from) / st.n;
+  const i = st.rows.length;
+  const correct = riemannSampleX(st.from, width, i, st.method);
+  const typed = riemannRound(Number(raw), st.decimalPlaces);
+  const correctRounded = riemannRound(correct, st.decimalPlaces);
+  if (Number.isFinite(typed) && typed === correctRounded){
+    riemannPushHistory();
+    st.rows.push({ x: correct, fx: null });
+    st.phase = "height";
+    st.feedback = null;
+    render();
+  } else {
+    const text = st.method === "trapezoid"
+      ? "Not quite. This should be the next strip boundary, one strip-width along from the last one."
+      : `Not quite. Use the ${st.method === "left" ? "left" : st.method === "right" ? "right" : "middle"} of this strip.`;
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("riemannFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function riemannCheckHeight(inputEl){
+  const st = S.riemann;
+  if (!st || st.phase !== "height") return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const f = compile(st.fx);
+  const i = st.rows.length - 1;
+  const correct = f(st.rows[i].x);
+  const typed = riemannRound(Number(raw), st.decimalPlaces);
+  const correctRounded = riemannRound(correct, st.decimalPlaces);
+  if (Number.isFinite(typed) && typed === correctRounded){
+    riemannPushHistory();
+    st.rows[i].fx = correct;
+    st.phase = st.rows.length < riemannRoundCount(st.n, st.method) ? "x" : "total";
+    st.feedback = null;
+    render();
+  } else {
+    const text = "Not quite. Substitute that x-value into f(x).";
+    st.feedback = { kind: "error", text };
+    const fb = document.getElementById("riemannFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+  }
+}
+
+function syndivDoneHtml(){
+  const st = S.syndiv;
+  const topPower = st.dividend.length - 1;
+  const quotientText = polyTermsText(st.finalQuotient, topPower - 1);
+  const dividendText = polyTermsText(st.dividend, topPower);
+  const divisorText = polyTermsText(st.divisor, 1);
+  const remainderLine = st.finalRemainder === 0
+    ? `Since the remainder is 0, $(${divisorText})$ is a factor of $(${dividendText})$.`
+    : `The remainder is $${st.finalRemainder}$.`;
+  // The same figure the completed exercise embeds into the chat transcript on Continue.
+  const gridSvg = FIG.syndivision({ dividend: st.dividend, divisor: st.divisor });
+  return `
+    <h3 style="font-size:1.05rem">✓ Complete</h3>
+    ${gridSvg}
+    <p style="font-weight:600">$\\dfrac{${dividendText}}{${divisorText}} = ${quotientText}$${
+      st.finalRemainder !== 0 ? `, remainder $${st.finalRemainder}$` : ""}</p>
+    <p class="small">${remainderLine}</p>
+    <div class="row">
+      <button class="btn-primary" id="synContinue" type="button">Continue</button>
+    </div>`;
+}
+
+function syndivWireDone(){
+  document.getElementById("synContinue").onclick = syndivFinish;
+}
+
+function syndivFinish(){
+  const st = S.syndiv;
+  const topPower = st.dividend.length - 1;
+  const quotientText = polyTermsText(st.finalQuotient, topPower - 1);
+  const dividendText = polyTermsText(st.dividend, topPower);
+  const divisorText = polyTermsText(st.divisor, 1);
+  const figureSpec = { type: "syndivision", dividend: st.dividend, divisor: st.divisor };
+  const figureBlock = "```figure\n" + JSON.stringify(figureSpec) + "\n```";
+  let summary = `$\\dfrac{${dividendText}}{${divisorText}} = ${quotientText}` +
+    (st.finalRemainder !== 0 ? `\\text{, remainder } ${st.finalRemainder}` : "") + "$.";
+  if (st.finalRemainder === 0) summary += ` Since the remainder is 0, $(${divisorText})$ is a factor of $(${dividendText})$.`;
+  if (st.auto.length) summary += ` MathWISE filled in ${st.auto.length} of the steps for you.`;
+  S.messages.push({ role: "user", content: st.questionText, visible: true, shot: st.questionShot });
+  S.messages.push({ role: "assistant", content: `## Full solution\n\n${figureBlock}\n\n${summary}` });
+  S.solved = true;
+  analyticsEnd("solved");
+  S.syndiv = null;
+  render();
+}
+
 // Whether a confirmed network is actually usable for the Kruskal's/Prim's exercise: needs at
 // least 2 vertices, at least one edge, every edge weighted (the algorithms are meaningless
 // without complete weights), no directed edges (MST algorithms are for undirected graphs), and the
@@ -7124,8 +9381,19 @@ function mstFinish(){
   const st = S.mst;
   const algoName = st.algorithm === "kruskal" ? "Kruskal's" : "Prim's";
   const summary = mstSummaryText(st.network, st.chosen, st.auto);
-  S.messages.push({ role:"user", content: st.questionText, visible:true });
-  S.messages.push({ role:"assistant", content: `## Full solution\n\nApplying ${algoName} algorithm: ${summary}` });
+  // Re-uses the exact same edge.highlight convention FIG.network already supports (added for
+  // this exercise's own "draw the chosen edges in red" answer diagrams) so the finished tree
+  // survives into the chat transcript and PDF/copy export, not just the exercise's own on-screen
+  // completion state which disappears once "Continue" is clicked.
+  const figureSpec = {
+    type: "network",
+    vertices: st.network.vertices,
+    edges: st.network.edges.map((e, i) => ({ ...e, highlight: st.chosen.includes(i) }))
+  };
+  const figureBlock = "```figure\n" + JSON.stringify(figureSpec) + "\n```";
+  S.messages.push({ role:"user", content: st.questionText, visible:true, shot: st.questionShot });
+  S.messages.push({ role:"assistant",
+    content: `## Full solution\n\nApplying ${algoName} algorithm:\n\n${figureBlock}\n\n${summary}` });
   S.solved = true;
   analyticsEnd("solved");
   S.mst = null;
@@ -7199,7 +9467,18 @@ function renderMstExercise(el){
     body += txt(X(v.x), Y(v.y) + 5, v.label, { size:14, weight:700, fill:"#4F2759" });
   });
 
+  // The original question never goes through the normal chat thread until mstFinish() pushes it
+  // at the very end — so without this, a student has no way to scroll back and check what was
+  // actually asked while the exercise itself is still on screen. Shown exactly the way the normal
+  // message thread shows a question: the photo if there is one, otherwise the transcribed text.
+  const questionHtml = `
+    <div class="msg user" style="margin-bottom:16px"><div class="who">?</div>
+      <div class="bubble">${st.questionShot
+        ? `<img class="qshot" src="${st.questionShot}" alt="A photo you shared with MathWISE">`
+        : "<p>" + esc(displayMathify(st.questionText)) + "</p>"}</div></div>`;
+
   el.innerHTML = st.done ? `
+    ${questionHtml}
     <h3 style="font-size:1.05rem">✓ Complete — minimum spanning tree found</h3>
     <p class="small">Here's the finished tree for ${algoName} algorithm.</p>
     <svg id="mstSvg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:640px;height:auto">${body}</svg>
@@ -7207,6 +9486,7 @@ function renderMstExercise(el){
     <div class="row">
       <button class="btn-primary" id="mstContinue" type="button">Continue</button>
     </div>` : `
+    ${questionHtml}
     <h3 style="font-size:1.05rem">Applying ${algoName} algorithm</h3>
     <p class="small">Click the edge you think ${algoName} should add next.</p>
     <p class="small" style="font-style:italic">${esc(mstStepGuidance(st.algorithm))}</p>
@@ -7227,6 +9507,396 @@ function renderMstExercise(el){
     });
     document.getElementById("mstHint").onclick = mstShowHint;
     document.getElementById("mstStep").onclick = mstAutoStep;
+  }
+}
+
+// Whether a confirmed network is actually usable for the Dijkstra's exercise: needs a named,
+// distinct, mutually-reachable start and destination, and every edge weighted — the algorithm is
+// meaningless without complete weights, and can never finish if the destination is unreachable.
+function dijkstraExerciseUsable(net, start, destination){
+  if (!net || !Array.isArray(net.vertices) || net.vertices.length < 2) return false;
+  if (!Array.isArray(net.edges) || !net.edges.length) return false;
+  if (net.edges.some(e => e.weight === undefined || e.weight === null || e.weight === "")) return false;
+  if (!start || !destination || start === destination) return false;
+  return dijkstraReachable(net, start, destination);
+}
+
+// Once the destination is circled, the forward pass is over — instead of finishing immediately,
+// this now starts a step-by-step BACKTRACK phase (per Ryan's explicit request), where the student
+// types their own way back to the start rather than MathWISE just computing and showing the path.
+function dijkstraCheckDone(){
+  const st = S.dijkstra;
+  if (st.backtracking || !st.circled.includes(st.destination)) return;
+  st.backtracking = true;
+  st.backtrackCursor = st.destination;
+  st.backtrackPath = [st.destination];
+  st.backtrackEdges = [];
+  st.feedback = null;
+  st.hinted = null;
+}
+
+// Snapshots everything that changes step to step (both the forward pass and the backtrack phase),
+// pushed before every state-changing action so "Undo" can restore exactly where things stood one
+// step back, in either phase.
+function dijkstraPushHistory(){
+  const st = S.dijkstra;
+  st.history.push({
+    circled: [...st.circled], entered: { ...st.entered }, auto: [...st.auto],
+    backtracking: st.backtracking, backtrackCursor: st.backtrackCursor,
+    backtrackPath: st.backtrackPath ? [...st.backtrackPath] : null,
+    backtrackEdges: st.backtrackEdges ? [...st.backtrackEdges] : null
+  });
+}
+
+function dijkstraUndo(){
+  const st = S.dijkstra;
+  if (!st || !st.history.length) return;
+  const prev = st.history.pop();
+  st.circled = prev.circled;
+  st.entered = prev.entered;
+  st.auto = prev.auto;
+  st.backtracking = prev.backtracking;
+  st.backtrackCursor = prev.backtrackCursor;
+  st.backtrackPath = prev.backtrackPath;
+  st.backtrackEdges = prev.backtrackEdges;
+  st.feedback = null;
+  st.hinted = null;
+  st.done = false; // undoing the very last backtrack step un-finishes a just-completed exercise
+  render();
+}
+
+// A vertex can only be circled once its OWN running-distance box has been correctly filled in —
+// typing the value is now a required part of the step, not something MathWISE just displays.
+function dijkstraTryChoose(id){
+  const st = S.dijkstra;
+  if (!st || st.backtracking || st.circled.includes(id)) return;
+  const { valid, reasonFor, dist } = dijkstraValidChoices(st.network, st.circled);
+  if (!valid.has(id)){
+    st.feedback = { kind:"error", text: reasonFor(id) };
+    render();
+    return;
+  }
+  if (st.entered[id] !== dist[id]){
+    st.feedback = { kind:"error", text: "Type in this vertex's running distance correctly before circling it." };
+    render();
+    return;
+  }
+  dijkstraPushHistory();
+  st.circled.push(id);
+  st.hinted = null;
+  const stale = dijkstraSupersededList(st.network, st.circled, st.entered);
+  const circledLabel = st.network.vertices.find(v => v.id === id).label;
+  st.feedback = stale.length
+    ? { kind:"hint", text: `Circling ${circledLabel} opened up a shorter path to ${stale.map(s => s.label).join(", ")} — the crossed-out value${stale.length > 1 ? "s are" : " is"} no longer correct, so enter the new distance${stale.length > 1 ? "s" : ""}.` }
+    : null;
+  dijkstraCheckDone();
+  render();
+}
+
+// Checks a typed distance against the true current value for that vertex. A wrong entry updates
+// only the feedback line directly (never a full render()) so the box the student is still typing
+// in never loses focus mid-retry — the same lesson learned from the editable-network canvas's
+// delete badge earlier this session. A correct entry is a genuine structural change (it may unlock
+// circling that vertex), so it repaints normally.
+function dijkstraCheckValue(vid, inputEl){
+  const st = S.dijkstra;
+  if (!st || st.backtracking || st.circled.includes(vid)) return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const typed = Number(raw);
+  const dist = dijkstraDistances(st.network, st.circled);
+  const correct = dist[vid];
+  if (Number.isFinite(typed) && typed === correct){
+    dijkstraPushHistory();
+    st.entered[vid] = typed;
+    st.feedback = null;
+    render();
+  } else {
+    st.feedback = { kind:"error", text:
+      "Not quite. Add an already-circled vertex's own distance to the weight of the edge connecting it to this one — check every circled vertex that connects here, and use whichever gives the smallest total." };
+    const fb = document.getElementById("dxFeedback");
+    if (fb){ fb.textContent = st.feedback.text; fb.className = "err"; }
+  }
+}
+
+// Checks a typed "cursor's distance minus this edge's weight" during backtracking. Two distinct
+// wrong cases get two distinct messages: the arithmetic itself is off, or the arithmetic is right
+// but this particular edge simply isn't the one the shortest path actually used (its result
+// doesn't match the neighbour's own real distance). Same never-lose-focus-on-a-wrong-guess
+// treatment as dijkstraCheckValue().
+function dijkstraCheckBacktrackValue(edgeIndex, neighborId, inputEl){
+  const st = S.dijkstra;
+  if (!st || !st.backtracking) return;
+  const raw = String(inputEl.value).trim();
+  if (raw === "") return;
+  const typed = Number(raw);
+  const dist = dijkstraDistances(st.network, st.circled);
+  const cursor = st.backtrackCursor;
+  const cursorLabel = st.network.vertices.find(v => v.id === cursor).label;
+  const edge = st.network.edges[edgeIndex];
+  const correctSubtraction = dist[cursor] - (+edge.weight);
+  let text = null;
+  if (!Number.isFinite(typed) || typed !== correctSubtraction){
+    text = `Not quite. ${cursorLabel}'s distance is ${dist[cursor]} — subtract this edge's weight (${edge.weight}) from that.`;
+  } else if (correctSubtraction !== dist[neighborId]){
+    const neighborLabel = st.network.vertices.find(v => v.id === neighborId).label;
+    text = `That arithmetic is right for this edge, but it doesn't match ${neighborLabel}'s own distance — this isn't the edge the shortest path actually used. Try a different one.`;
+  }
+  if (text){
+    st.feedback = { kind:"error", text };
+    const fb = document.getElementById("dxFeedback");
+    if (fb){ fb.textContent = text; fb.className = "err"; }
+    return;
+  }
+  dijkstraPushHistory();
+  st.backtrackPath.unshift(neighborId);
+  st.backtrackEdges.unshift(edgeIndex);
+  st.backtrackCursor = neighborId;
+  st.feedback = null;
+  if (neighborId === st.start){
+    st.done = true;
+    st.pathVertices = st.backtrackPath;
+    st.pathEdges = st.backtrackEdges;
+    st.finalDistance = dist[st.destination];
+  }
+  render();
+}
+
+function dijkstraShowHint(){
+  const st = S.dijkstra;
+  if (st.backtracking){
+    st.feedback = { kind:"hint", text: "Subtract each candidate edge's weight from the current vertex's own distance — whichever result matches that edge's other vertex's own distance is the correct previous step." };
+  } else {
+    const { valid } = dijkstraValidChoices(st.network, st.circled);
+    st.hinted = valid;
+    st.feedback = { kind:"hint", text: "The highlighted vertex/vertices have the smallest running distance right now — type its correct value in, then circle it." };
+  }
+  render();
+}
+
+// Fills in the correct value AND circles the vertex in one go, as if the student had done both
+// parts of the step correctly — still explained, still undo-able.
+function dijkstraAutoStep(){
+  const st = S.dijkstra;
+  const { valid, dist } = dijkstraValidChoices(st.network, st.circled);
+  if (!valid.size) return;
+  const pick = st.network.vertices.find(v => valid.has(v.id));
+  dijkstraPushHistory();
+  st.entered[pick.id] = dist[pick.id];
+  st.circled.push(pick.id);
+  st.auto.push(pick.id);
+  st.hinted = null;
+  const stale = dijkstraSupersededList(st.network, st.circled, st.entered);
+  let text = `${pick.label} has the smallest running distance (${dist[pick.id]}) among the vertices reached so far, so it's circled next.`;
+  if (stale.length){
+    text += ` This also opens up a shorter path to ${stale.map(s => s.label).join(", ")} — its old crossed-out value${stale.length > 1 ? "s are" : " is"} no longer correct, so enter the new distance${stale.length > 1 ? "s" : ""}.`;
+  }
+  st.feedback = { kind:"step", text };
+  dijkstraCheckDone();
+  render();
+}
+
+// The backtracking equivalent of dijkstraAutoStep() — finds the one candidate edge that's actually
+// correct, confirms it (as if the student had typed the right subtraction), and explains why.
+function dijkstraBacktrackAutoStep(){
+  const st = S.dijkstra;
+  const dist = dijkstraDistances(st.network, st.circled);
+  const cursor = st.backtrackCursor;
+  const candidates = dijkstraBacktrackCandidates(st.network, st.circled, cursor);
+  const correct = candidates.find(c => (dist[cursor] - c.weight) === dist[c.neighborId]);
+  if (!correct) return;
+  dijkstraPushHistory();
+  const cursorLabel = st.network.vertices.find(v => v.id === cursor).label;
+  const neighborLabel = st.network.vertices.find(v => v.id === correct.neighborId).label;
+  st.backtrackPath.unshift(correct.neighborId);
+  st.backtrackEdges.unshift(correct.edgeIndex);
+  st.backtrackCursor = correct.neighborId;
+  st.auto.push(correct.neighborId);
+  st.hinted = null;
+  st.feedback = { kind:"step", text: `${cursorLabel}'s distance (${dist[cursor]}) minus the edge to ${neighborLabel} (weight ${correct.weight}) equals ${dist[correct.neighborId]}, ${neighborLabel}'s own distance — so the path comes from ${neighborLabel}.` };
+  if (correct.neighborId === st.start){
+    st.done = true;
+    st.pathVertices = st.backtrackPath;
+    st.pathEdges = st.backtrackEdges;
+    st.finalDistance = dist[st.destination];
+  }
+  render();
+}
+
+function dijkstraFinish(){
+  const st = S.dijkstra;
+  const summary = dijkstraSummaryText(st.network, { vertices: st.pathVertices, edges: st.pathEdges }, st.finalDistance, st.auto);
+  const dist = dijkstraDistances(st.network, st.circled);
+  // Re-uses the same edge.highlight and vertex.circled/value fields FIG.network already supports
+  // (the latter two built at the very start of this session specifically for this future case) so
+  // the finished working survives into the chat transcript and PDF/copy export.
+  const figureSpec = {
+    type: "network",
+    vertices: st.network.vertices.map(v => ({
+      ...v,
+      circled: st.circled.includes(v.id),
+      value: st.circled.includes(v.id) ? dist[v.id] : undefined
+    })),
+    edges: st.network.edges.map((e, i) => ({ ...e, highlight: st.pathEdges.includes(i) }))
+  };
+  const figureBlock = "```figure\n" + JSON.stringify(figureSpec) + "\n```";
+  S.messages.push({ role:"user", content: st.questionText, visible:true, shot: st.questionShot });
+  S.messages.push({ role:"assistant",
+    content: `## Full solution\n\nApplying Dijkstra's algorithm:\n\n${figureBlock}\n\n${summary}` });
+  S.solved = true;
+  analyticsEnd("solved");
+  S.dijkstra = null;
+  render();
+}
+
+// Sibling of renderMstExercise(), for the vertex-circling interaction instead of edge-picking:
+// clicking an uncircled vertex tries to circle it, a running distance is shown next to every
+// reached vertex, and a double ring marks one already circled — the same visual convention as the
+// textbook's own worked examples.
+function renderDijkstraExercise(el){
+  const st = S.dijkstra;
+  const net = st.network;
+  const X = v => PAD + v / 100 * (W - PAD * 2);
+  const Y = v => PAD + v / 100 * (H - PAD * 2);
+  const dist = dijkstraDistances(net, st.circled);
+  const onPathEdges = st.backtrackEdges || [];
+  const validSet = (!st.done && !st.backtracking) ? dijkstraValidChoices(net, st.circled).valid : new Set();
+  const hasDirected = net.edges.some(e => e.directed);
+
+  let body = hasDirected ? `<defs><marker id="dxar" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8a9a"/></marker>
+      <marker id="dxarh" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c0392b"/></marker></defs>` : "";
+  net.edges.forEach((e, i) => {
+    const a = net.vertices.find(v => v.id === e.from), b = net.vertices.find(v => v.id === e.to);
+    if (!a || !b) return;
+    const x1 = X(a.x), y1 = Y(a.y), x2 = X(b.x), y2 = Y(b.y), mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const onPath = onPathEdges.includes(i);
+    body += `<line x1="${num(x1)}" y1="${num(y1)}" x2="${num(x2)}" y2="${num(y2)}"
+      stroke="${onPath ? "#c0392b" : "#8a8a9a"}" stroke-width="${onPath ? 4 : 2}"
+      ${e.directed ? `marker-end="url(#${onPath ? "dxarh" : "dxar"})"` : ""}/>`;
+    body += txt(mx, my, String(e.weight), { size:13, weight:700, fill: onPath ? "#c0392b" : C_AXIS, bg:"rgba(255,255,255,0.85)" });
+  });
+  net.vertices.forEach(v => {
+    const cx = X(v.x), cy = Y(v.y);
+    const isCircled = st.circled.includes(v.id);
+    const isValid = validSet.has(v.id);
+    const isCursor = st.backtracking && !st.done && v.id === st.backtrackCursor;
+    const correctDist = dist[v.id];
+    const hasCorrectEntry = st.entered[v.id] !== undefined && st.entered[v.id] === correctDist;
+    if (isCircled) body += `<circle cx="${num(cx)}" cy="${num(cy)}" r="24" fill="none"
+      stroke="${isCursor ? "#C59F40" : "#4F2759"}" stroke-width="${isCursor ? 2.4 : 1.6}"/>`;
+    body += `<circle data-vid="${esc(v.id)}" cx="${num(cx)}" cy="${num(cy)}" r="20"
+      fill="#fff" stroke="${isValid ? "#C59F40" : "#4F2759"}" stroke-width="${isValid ? 3 : 2}"
+      style="cursor:${!st.done && !st.backtracking && !isCircled ? "pointer" : "default"}"/>`;
+    body += txt(cx, cy + 5, v.label, { size:14, weight:700, fill:"#4F2759" });
+    if (isCircled || hasCorrectEntry || st.backtracking){
+      // Locked in — shown as plain text, not an input. Once backtracking starts there's no more
+      // value-typing to do at all (the forward pass is over), so every reached vertex shows plain
+      // text regardless of hasCorrectEntry from here on.
+      if (isFinite(correctDist)) body += txt(cx + 26, cy - 24, String(correctDist),
+        { size:12, weight:700, fill:"#7a4a86", bg:"rgba(255,255,255,0.88)" });
+    } else if (isFinite(correctDist) && !st.done){
+      // Reached but not yet correctly entered — an editable box for the student to fill in. If
+      // `entered` still holds an old value here, it was correct once but a cheaper route has since
+      // been found through a later-circled vertex (nothing clears `entered` automatically — see
+      // dijkstraSupersededList) — show it crossed out right above the reopened box, rather than
+      // letting it silently vanish, so the student can see something changed and why.
+      const staleVal = st.entered[v.id];
+      const isStale = staleVal !== undefined && staleVal !== correctDist;
+      body += `<foreignObject x="${num(cx + 8)}" y="${num(cy - (isStale ? 50 : 34))}" width="46" height="${isStale ? 38 : 22}">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;flex-direction:column;align-items:center;gap:2px">
+          ${isStale ? `<span style="font-size:10px;color:#c0392b;text-decoration:line-through;background:rgba(255,255,255,0.85);padding:0 2px;border-radius:3px">${esc(String(staleVal))}</span>` : ""}
+          <input data-vid="${esc(v.id)}" class="dxval" type="number"
+            placeholder="?" style="width:34px;height:22px;border:1px solid #C59F40;border-radius:4px;
+            font-size:12px;text-align:center;background:#fff;padding:1px">
+        </div></foreignObject>`;
+    }
+  });
+
+  const questionHtml = `
+    <div class="msg user" style="margin-bottom:16px"><div class="who">?</div>
+      <div class="bubble">${st.questionShot
+        ? `<img class="qshot" src="${st.questionShot}" alt="A photo you shared with MathWISE">`
+        : "<p>" + esc(displayMathify(st.questionText)) + "</p>"}</div></div>`;
+
+  // The step-by-step backtrack phase: rather than MathWISE computing the shortest path itself once
+  // the destination is circled, the student subtracts each candidate edge's weight from the
+  // current vertex's own distance and types the result — a match against the OTHER vertex's own
+  // distance confirms that edge as the real previous step, exactly the check the textbook itself
+  // describes ("7 minus 3 equals 4, the value of vertex E").
+  let backtrackHtml = "";
+  if (st.backtracking && !st.done){
+    const cursorLabel = net.vertices.find(v => v.id === st.backtrackCursor).label;
+    const candidates = dijkstraBacktrackCandidates(net, st.circled, st.backtrackCursor);
+    backtrackHtml = `
+      <div style="margin-top:10px">
+        <strong style="font-size:.9rem">Backtracking from ${esc(cursorLabel)} (distance ${dist[st.backtrackCursor]})</strong>
+        <p class="small" style="margin:4px 0">Try each edge below that connects ${esc(cursorLabel)} to an already-circled vertex. Work out the subtraction and type the result in — if it matches that vertex's own distance, you've found the real previous step on the shortest path.</p>
+        ${candidates.map(c => {
+          const nbrLabel = net.vertices.find(v => v.id === c.neighborId).label;
+          return `<div class="row" style="align-items:center;gap:8px;margin-top:6px">
+            <span class="small">${esc(cursorLabel)}'s distance (${dist[st.backtrackCursor]}) − edge to ${esc(nbrLabel)} (weight ${c.weight}) =</span>
+            <input type="number" class="dxback" data-edge="${c.edgeIndex}" data-nbr="${esc(c.neighborId)}"
+              placeholder="?" style="width:60px;border:1px solid #C59F40;border-radius:4px;
+              text-align:center;padding:3px">
+            <span class="small">— does this equal ${esc(nbrLabel)}'s own distance (${dist[c.neighborId]})?</span></div>`;
+        }).join("")}
+      </div>`;
+  }
+
+  el.innerHTML = st.done ? `
+    ${questionHtml}
+    <h3 style="font-size:1.05rem">✓ Complete — shortest path found</h3>
+    <p class="small">Here's the finished working for Dijkstra's algorithm.</p>
+    <svg id="dxSvg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:640px;height:auto">${body}</svg>
+    <p style="font-weight:600">Shortest path length: ${st.finalDistance}</p>
+    <div class="row">
+      <button class="btn-primary" id="dxContinue" type="button">Continue</button>
+    </div>` : `
+    ${questionHtml}
+    <h3 style="font-size:1.05rem">Applying Dijkstra's algorithm</h3>
+    <p class="small">${st.backtracking
+      ? `${esc(net.vertices.find(v => v.id === st.destination).label)} is circled with a final distance of ${dist[st.destination]} — that's the shortest path's total length. Now find out which edges actually made up that path: starting from ${esc(net.vertices.find(v => v.id === st.backtrackCursor).label)}, work backwards one already-circled vertex at a time until you reach the start.`
+      : "Type each reached vertex's running distance into its box, then click the vertex you think should be circled next."}</p>
+    <p class="small" style="font-style:italic">${esc(st.backtracking ? dijkstraBacktrackGuidance() : dijkstraStepGuidance())}</p>
+    <svg id="dxSvg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:640px;height:auto">${body}</svg>
+    ${backtrackHtml}
+    <p id="dxFeedback" class="${st.feedback && st.feedback.kind === "error" ? "err" : "small"}">${st.feedback ? esc(st.feedback.text) : ""}</p>
+    <div class="row">
+      <button class="btn-secondary" id="dxHint" type="button">Hint</button>
+      <button class="btn-quiet" id="dxStep" type="button">I'm stuck — show me this step</button>
+      <button class="btn-quiet" id="dxUndo" type="button" ${st.history.length ? "" : "disabled"}>Undo</button>
+    </div>`;
+
+  if (st.done){
+    document.getElementById("dxContinue").onclick = dijkstraFinish;
+  } else if (st.backtracking){
+    document.querySelectorAll(".dxback").forEach(inputEl => {
+      const edgeIndex = +inputEl.dataset.edge, nbr = inputEl.dataset.nbr;
+      inputEl.onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); dijkstraCheckBacktrackValue(edgeIndex, nbr, inputEl); } };
+      inputEl.onblur = () => dijkstraCheckBacktrackValue(edgeIndex, nbr, inputEl);
+    });
+    document.getElementById("dxHint").onclick = dijkstraShowHint;
+    document.getElementById("dxStep").onclick = dijkstraBacktrackAutoStep;
+    document.getElementById("dxUndo").onclick = dijkstraUndo;
+  } else {
+    // Scoped to circle elements specifically — data-vid also appears on the .dxval value inputs,
+    // which need their own keydown/blur handling below, not a click-to-circle one.
+    document.querySelectorAll("#dxSvg circle[data-vid]").forEach(circleEl => {
+      const id = circleEl.dataset.vid;
+      circleEl.onclick = () => dijkstraTryChoose(id);
+    });
+    document.querySelectorAll("#dxSvg input.dxval").forEach(inputEl => {
+      const id = inputEl.dataset.vid;
+      inputEl.onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); dijkstraCheckValue(id, inputEl); } };
+      inputEl.onblur = () => dijkstraCheckValue(id, inputEl);
+    });
+    document.getElementById("dxHint").onclick = dijkstraShowHint;
+    document.getElementById("dxStep").onclick = dijkstraAutoStep;
+    document.getElementById("dxUndo").onclick = dijkstraUndo;
   }
 }
 
@@ -7346,11 +10016,26 @@ function renderIntake(box){
         network: net,
         startVertex: algo === "prim" ? primStartVertex(net, v) : null,
         chosen: [], auto: [], hinted: null, feedback: null, done: false,
-        questionText: v
+        questionText: v, questionShot: shot
       };
       S.intake = null; S.intakeEdit = false; S.showIntake = false;
       render();
       return;
+    }
+    if (algo === "dijkstra"){
+      const { start, destination } = dijkstraEndpoints(net, v);
+      if (dijkstraExerciseUsable(net, start, destination)){
+        S.dijkstra = {
+          network: net, start, destination,
+          circled: [start], entered: {}, history: [],
+          backtracking: false, backtrackCursor: null, backtrackPath: null, backtrackEdges: null,
+          auto: [], hinted: null, feedback: null, done: false,
+          questionText: v, questionShot: shot
+        };
+        S.intake = null; S.intakeEdit = false; S.showIntake = false;
+        render();
+        return;
+      }
     }
 
     S.intake = null; S.intakeEdit = false; S.showIntake = false;
@@ -7451,6 +10136,10 @@ function renderNetworkPanel(){
 
   let mode = null;           // null | "addVertex" | { addEdgeFrom: id|null }
   let delTarget = null;      // { type:"vertex"|"edge", id|idx } — who the delete badge would remove
+  // Each edge's actual drawn position (a loop's small circle, or a straight/offset line's
+  // midpoint) — recomputed by paint() every repaint, and read by wire()'s edge-input focus
+  // handler below so the delete badge lands on the same spot the edge was actually drawn.
+  let edgeGeom = [];
 
   const hintEl = document.getElementById("netHint");
   const setHint = msg => { hintEl.textContent = msg || ""; };
@@ -7480,12 +10169,41 @@ function renderNetworkPanel(){
 
   const paint = () => {
     let body = "";
+    // As in FIG.network: a loop (from === to) collapses to a zero-length, invisible line under
+    // the plain straight-line formula, and duplicate edges between the same pair of vertices
+    // would sit exactly on top of each other. Compute each edge's drawn geometry once — grouping
+    // by unordered pair to fan out duplicates, and giving loops their own small-circle drawing —
+    // so both the line itself and its weight-input foreignObject agree on where it actually is.
+    const pairKey = e => String(e.from) === String(e.to) ? null
+      : [String(e.from), String(e.to)].sort().join(" ");
+    const pairCount = {};
+    net.edges.forEach(e => { const k = pairKey(e); if (k) pairCount[k] = (pairCount[k] || 0) + 1; });
+    const pairSeen = {};
+    edgeGeom = [];
     net.edges.forEach((e, i) => {
       const a = at(e.from), b = at(e.to);
-      if (!a || !b) return;
-      const x1 = X(a.x), y1 = Y(a.y), x2 = X(b.x), y2 = Y(b.y), mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-      body += `<line x1="${num(x1)}" y1="${num(y1)}" x2="${num(x2)}" y2="${num(y2)}" stroke="#8a8a9a" stroke-width="2"/>`;
-      body += `<foreignObject x="${num(mx - 28)}" y="${num(my - 13)}" width="56" height="26">
+      if (!a || !b){ edgeGeom[i] = null; return; }
+      if (String(e.from) === String(e.to)){
+        const cx = X(a.x), cy = Y(a.y), lr = 15, ly = cy - 19 - lr;
+        body += `<circle cx="${num(cx)}" cy="${num(ly)}" r="${lr}" fill="none" stroke="#8a8a9a" stroke-width="2"/>`;
+        edgeGeom[i] = { mx: cx, my: ly - lr - 13 };
+        return;
+      }
+      const x1 = X(a.x), y1 = Y(a.y), x2 = X(b.x), y2 = Y(b.y);
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const k = pairKey(e), count = pairCount[k] || 1;
+      const seen = (pairSeen[k] = (pairSeen[k] || 0) + 1) - 1;
+      const off = count > 1 ? (seen - (count - 1) / 2) * 10 : 0;
+      const px = -uy * off, py = ux * off;
+      const sx = x1 + px, sy = y1 + py, ex = x2 + px, ey = y2 + py;
+      body += `<line x1="${num(sx)}" y1="${num(sy)}" x2="${num(ex)}" y2="${num(ey)}" stroke="#8a8a9a" stroke-width="2"/>`;
+      edgeGeom[i] = { mx: (sx + ex) / 2, my: (sy + ey) / 2 };
+    });
+    net.edges.forEach((e, i) => {
+      const g = edgeGeom[i];
+      if (!g) return;
+      body += `<foreignObject x="${num(g.mx - 28)}" y="${num(g.my - 13)}" width="56" height="26">
         <div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;align-items:center;justify-content:center;gap:2px">
           <input data-eidx="${i}" class="einput" type="number"
             value="${e.weight === undefined || e.weight === null ? "" : e.weight}" placeholder="wt"
@@ -7584,8 +10302,8 @@ function renderNetworkPanel(){
         net.edges[i].weight = input.value === "" ? "" : +input.value;
       };
       input.onfocus = () => {
-        const e = net.edges[i], a = at(e.from), b = at(e.to);
-        if (a && b) showDeleteBadge("edge", i, (X(a.x) + X(b.x)) / 2, (Y(a.y) + Y(b.y)) / 2);
+        const g = edgeGeom[i];
+        if (g) showDeleteBadge("edge", i, g.mx, g.my);
       };
       input.onblur = () => setTimeout(() => hideDeleteBadgeIfStill("edge", i), 120);
     });
