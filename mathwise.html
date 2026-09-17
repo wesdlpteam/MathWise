@@ -2073,9 +2073,57 @@ function analyticsRate(rating){
   } catch (e){ /* best effort only */ }
 }
 
-// Replaced with a real sender further down. Declared here so the lifecycle
-// can call it and the self-check can run without a network.
-function queueSend(record){ /* wired up in the sender section */ }
+// The app is served from GitHub Pages; the endpoints live on Vercel. Opened as
+// a local file there is no server to talk to, so sending is off and records
+// simply stay in this browser. That also keeps the self-check offline.
+const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1"
+  || location.protocol === "file:") ? "" : "https://mathwise.vercel.app";
+
+function loadOutbox(){
+  try { return JSON.parse(localStorage.getItem("mw_outbox") || "[]"); }
+  catch (e){ return []; }
+}
+
+function saveOutbox(list){
+  try { localStorage.setItem("mw_outbox", JSON.stringify(list.slice(-200))); }
+  catch (e){ /* best effort only */ }
+}
+
+function queueSend(record){
+  try {
+    if (!API_BASE) return;
+    const box = loadOutbox();
+    box.push(record);
+    saveOutbox(box);
+    flushOutbox();
+  } catch (e){ /* analytics must never break a tutoring request */ }
+}
+
+// Sends the queue and keeps whatever did not get through, so a dropped
+// connection or a closed laptop loses nothing. keepalive lets a send started
+// by a closing tab finish after the page has gone.
+function flushOutbox(){
+  try {
+    if (!API_BASE) return;
+    const box = loadOutbox();
+    if (!box.length) return;
+    saveOutbox([]);                    // taken out first, put back on failure
+    box.forEach(record => {
+      fetch(API_BASE + "/api/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+        keepalive: true
+      }).then(res => {
+        if (!res.ok) throw new Error("rejected");
+      }).catch(() => {
+        const back = loadOutbox();
+        back.push(record);
+        saveOutbox(back);
+      });
+    });
+  } catch (e){ /* best effort only */ }
+}
 
 /* --- Expressions ----------------------------------------------------- *
  * A small shunting-yard parser. The model writes y = f(x) as a string and
@@ -8243,6 +8291,8 @@ window.addEventListener("pagehide", () => analyticsEnd("closed"));
 // Any click anywhere in the app counts as a sign of life for the idle clock.
 document.addEventListener("click", () => analyticsTouch(), true);
 window.addEventListener("focus", () => analyticsTouch());
+// Anything stranded by a closed laptop or a dropped connection goes now.
+flushOutbox();
 
 if (new URLSearchParams(location.search).get("selftest") === "1") runSelfTest();
 else render();
