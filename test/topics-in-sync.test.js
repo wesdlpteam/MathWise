@@ -27,6 +27,9 @@ function labelsInApp() {
   return new Set([
     ...quoted(between("const TOPICS = {", "\n};")),
     ...quoted(between("const Y10_CORE = [", "\n];")),
+    // The three IB Diploma courses share one list, assigned to TOPICS after the
+    // object literal closes, so it is not inside the block scanned above.
+    ...quoted(between("const IB_TOPIC_LIST = [", "\n];")),
     ...keywordLabels,
   ]);
 }
