@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex" />
+<title>MathWISE Staff Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Sans+Egyptian+Hieroglyphs&family=Noto+Sans+Cuneiform&display=swap" rel="stylesheet">
+<style>
+:root{
+  --purple:#4F2759;
+  --gold:#C59F40;
+  --ink:#2B2430;
+  --muted:#8A8291;
+  --paper:#FDFCFD;
+  --track:#EDE8F0;
+  --good:#2b7a3f;
+  --bad:#b3261e;
+  --sans:'Figtree','Noto Sans Egyptian Hieroglyphs','Noto Sans Cuneiform',
+    -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{max-width:100%;overflow-x:hidden}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.55;-webkit-text-size-adjust:100%}
+.wrap{max-width:980px;margin:0 auto;padding:26px 18px 70px;width:100%}
+h1,h2,h3{font-family:var(--sans);font-weight:600;color:var(--purple);margin:0 0 .35rem;
+  letter-spacing:-.01em}
+h2{font-size:1.3rem;margin-top:0}
+h3{font-size:1.02rem;margin-top:0}
+p{margin:0 0 .7rem}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.tiny{font-size:.78rem}
+code{background:var(--track);padding:1px 5px;border-radius:3px;font-size:.85em}
+
+.wordmark{font-weight:700;color:var(--purple);letter-spacing:-.02em;font-size:1.85rem;
+  line-height:1;margin:0}
+.wordmark .wise{color:var(--gold)}
+.mw-head{padding:6px 0 18px}
+.mw-head p{margin-top:4px;margin-bottom:0}
+
+.mw-gate{max-width:360px;margin:60px auto;padding:26px;border:1px solid var(--track);
+  border-radius:8px;display:flex;flex-direction:column;gap:10px}
+.mw-gate label{font-weight:600;color:var(--purple);font-size:.9rem}
+.mw-gate input{font:inherit;padding:9px 11px;border:1px solid var(--track);border-radius:5px;
+  width:100%}
+.mw-gate input:focus{outline:2px solid var(--purple);outline-offset:1px}
+.mw-error{color:var(--bad);font-size:.88rem;margin:6px 0 0}
+
+.btn{font:inherit;font-weight:600;background:var(--purple);color:#fff;border:none;
+  border-radius:5px;padding:10px 16px;cursor:pointer}
+.btn:hover:not(:disabled){background:#3d1e46}
+.btn:disabled{opacity:.6;cursor:default}
+.btn-quiet{font:inherit;background:none;border:1px solid var(--track);color:var(--muted);
+  border-radius:5px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn-quiet:hover{border-color:var(--purple);color:var(--purple)}
+
+section.mw-section{margin-top:0}
+section.mw-section + section.mw-section{border-top:1px solid var(--track);
+  margin-top:2.2rem;padding-top:1.6rem}
+
+.mw-block{margin-bottom:20px}
+.mw-scroll{overflow-x:auto;max-width:100%}
+.mw-chart{width:100%;height:auto;display:block}
+
+.mw-barchart{display:flex;flex-direction:column;gap:8px;max-width:100%}
+.mw-bar-row{display:grid;grid-template-columns:140px 1fr 46px;gap:10px;align-items:center;
+  font-size:.9rem}
+.mw-bar-label{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mw-bar-track{background:var(--track);border-radius:4px;height:14px;overflow:hidden}
+.mw-bar-fill{display:block;height:100%;background:var(--purple);border-radius:4px}
+.mw-bar-count{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+
+.mw-divided-wrap{max-width:100%}
+.mw-divided-bar{width:100%;height:auto;display:block;border-radius:4px;overflow:hidden}
+.mw-legend{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:14px;
+  font-size:.86rem;color:var(--muted)}
+.mw-legend-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;
+  vertical-align:-1px}
+
+.mw-bigstat-num{font-size:44px;font-weight:700;color:var(--purple);line-height:1}
+
+.mw-cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.mw-card{border:1px solid var(--track);border-radius:6px;padding:14px}
+.mw-card-title{font-size:.82rem;color:var(--muted);margin-bottom:4px}
+.mw-card-value{font-size:1.5rem;font-weight:700;color:var(--ink)}
+.mw-card-sub{font-size:.82rem;color:var(--muted);margin-top:4px}
+.mw-arrow-good{color:var(--good)}
+.mw-arrow-bad{color:var(--bad)}
+.mw-arrow-neutral,.mw-arrow-flat{color:var(--muted)}
+
+table.mw-table{border-collapse:collapse;width:100%;font-size:.88rem;background:#fff;
+  min-width:640px}
+table.mw-table th{background:var(--track);color:var(--purple);font-weight:600;text-align:left;
+  padding:8px 10px}
+table.mw-table td{padding:7px 10px;border:1px solid var(--track)}
+table.mw-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.mw-table tr.total td{font-weight:600;border-top:2px solid var(--gold)}
+
+.mw-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+@media (max-width:600px){
+  .mw-bar-row{grid-template-columns:92px 1fr 40px}
+  .wordmark{font-size:1.55rem}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mw-head">
+    <h1 class="wordmark">Math<span class="wise">WISE</span></h1>
+    <p class="muted">Staff dashboard</p>
+  </header>
+
+  <form id="gate" class="mw-gate">
+    <label for="adminpw">Admin password</label>
+    <input type="password" id="adminpw" name="adminpw" autocomplete="current-password" required>
+    <button type="submit" class="btn" id="gatesubmit">View dashboard</button>
+    <p id="gateerror" class="mw-error" hidden></p>
+  </form>
+
+  <div id="panels" hidden>
+
+    <section class="mw-section" id="sec-overview">
+      <h2>Overview</h2>
+      <div id="sec-overview-body"></div>
+    </section>
+
+    <section class="mw-section" id="sec-scorecard">
+      <h2>Weekly scorecard</h2>
+      <div id="sec-scorecard-body"></div>
+    </section>
+
+    <section class="mw-section" id="sec-cost">
+      <h2>Cost</h2>
+      <div id="sec-cost-body"></div>
+    </section>
+
+    <section class="mw-section" id="sec-data">
+      <h2>Data</h2>
+      <div id="sec-data-body"></div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* --- Text to HTML ------------------------------------------------------ *
+ * Topic, course and band labels come from a database that student browsers
+ * write to. Every value interpolated into HTML anywhere on this page goes
+ * through this first, treated as untrusted text and never as markup.
+ * ------------------------------------------------------------------ */
+function esc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+/* --- Gate ---------------------------------------------------------------
+ * The page holds no password of its own. It sends what was typed and lets
+ * the server decide, so reading the page source reveals neither a password
+ * nor any data.
+ * ------------------------------------------------------------------ */
+
+var API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1"
+  || location.protocol === "file:") ? "" : "https://mathwise.vercel.app";
+var STORE_KEY = "mw_admin_pw";
+var lastData = null;
+
+function fetchStats(password) {
+  return fetch(API_BASE + "/api/stats", {
+    method: "POST",
+    headers: { "x-mw-admin": password }
+  }).then(function (res) {
+    if (res.status === 401) { var e = new Error("wrong-password"); e.code = 401; throw e; }
+    if (!res.ok) throw new Error("server");
+    return res.json();
+  });
+}
+
+function loadStats(password) {
+  return fetchStats(password).then(function (data) {
+    // sessionStorage, not localStorage: closing the browser re-locks the page.
+    sessionStorage.setItem(STORE_KEY, password);
+    document.getElementById("gate").hidden = true;
+    document.getElementById("panels").hidden = false;
+    renderAll(data);
+  }).catch(function (err) {
+    sessionStorage.removeItem(STORE_KEY);
+    showGateError(err.code === 401 ? "Wrong password." : "Could not reach the server.");
+  });
+}
+
+// A reload inside the same tab should not ask again.
+var stored = sessionStorage.getItem(STORE_KEY);
+if (stored) loadStats(stored);
+
+function showGateError(msg){
+  var el = document.getElementById("gateerror");
+  el.textContent = msg;
+  el.hidden = false;
+}
+function hideGateError(){
+  var el = document.getElementById("gateerror");
+  el.hidden = true;
+  el.textContent = "";
+}
+
+(function(){
+  var form = document.getElementById("gate");
+  var input = document.getElementById("adminpw");
+  var btn = document.getElementById("gatesubmit");
+  form.addEventListener("submit", function(e){
+    e.preventDefault();
+    hideGateError();
+    btn.disabled = true;
+    loadStats(input.value).then(function(){
+      btn.disabled = false;
+    });
+  });
+})();
+
+/* --- Formatting helpers -------------------------------------------------*/
+
+function fmtMoney(n){
+  var v = Number(n);
+  if (!Number.isFinite(v)) v = 0;
+  return "$" + v.toFixed(4);
+}
+
+/* --- Chart helpers --------------------------------------------------- *
+ * Plain functions: data in, an HTML string out. No library, no canvas, no
+ * CDN. Every one of them returns exactly the sentence below when it is
+ * given an empty array, a null, or rows that sum to zero, because a fresh
+ * install has no data and that is the first thing anyone will see.
+ * ------------------------------------------------------------------ */
+
+// points: [{ day: "2026-09-16", n: 4 }, ...] already sorted oldest first.
+function lineChart(points, label){
+  var pts = (points || []).filter(function(p){ return p && Number.isFinite(Number(p.n)); });
+  var total = pts.reduce(function(s, p){ return s + Number(p.n); }, 0);
+  if (!pts.length || total === 0) return `<p class="muted">Nothing recorded yet.</p>`;
+
+  var W = 640, H = 220, padL = 34, padR = 12, padT = 14, padB = 26;
+  var n = pts.length;
+  var max = Math.max.apply(null, pts.map(function(p){ return Number(p.n); }));
+  if (!Number.isFinite(max) || max <= 0) max = 1;
+
+  var coords = pts.map(function(p, i){
+    var x = n === 1 ? padL : padL + (i / (n - 1)) * (W - padL - padR);
+    var y = H - padB - (Number(p.n) / max) * (H - padT - padB);
+    return [x, y];
+  });
+
+  var dots = coords.map(function(c){
+    return `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3.5" fill="#4F2759"></circle>`;
+  }).join("");
+
+  var firstLabel = esc(pts[0].day || "");
+  var lastLabel = esc(pts[n - 1].day || "");
+
+  return `<div class="mw-scroll"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label || "")}" class="mw-chart">
+    <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="#EDE8F0" stroke-width="1"></line>
+    <text x="4" y="${H - padB + 4}" font-size="11" fill="#8A8291">0</text>
+    <text x="4" y="${padT + 8}" font-size="11" fill="#8A8291">${esc(String(max))}</text>
+    <polyline points="${coords.map(function(c){ return c[0].toFixed(1) + "," + c[1].toFixed(1); }).join(" ")}" fill="none" stroke="#C59F40" stroke-width="2.5"></polyline>
+    ${dots}
+    <text x="${padL}" y="${H - 6}" font-size="11" fill="#8A8291">${firstLabel}</text>
+    <text x="${W - padR}" y="${H - 6}" font-size="11" fill="#8A8291" text-anchor="end">${lastLabel}</text>
+  </svg></div>`;
+}
+
+// rows: [{ <keyField>: "VCE", n: 12 }, ...]. Sorts longest first itself.
+function barChart(rows, keyField, label){
+  var list = (rows || []).filter(function(r){
+    return r && r[keyField] != null && Number.isFinite(Number(r.n));
+  });
+  var total = list.reduce(function(s, r){ return s + Number(r.n); }, 0);
+  if (!list.length || total === 0) return `<p class="muted">Nothing recorded yet.</p>`;
+
+  var sorted = list.slice().sort(function(a, b){ return Number(b.n) - Number(a.n); });
+  var max = Number(sorted[0].n) || 1;
+
+  var rowsHtml = sorted.map(function(r){
+    var n = Number(r.n) || 0;
+    var widthPct = max ? Math.max(2, Math.round((n / max) * 100)) : 0;
+    return `<div class="mw-bar-row">
+      <span class="mw-bar-label">${esc(String(r[keyField]))}</span>
+      <span class="mw-bar-track"><span class="mw-bar-fill" style="width:${widthPct}%"></span></span>
+      <span class="mw-bar-count">${esc(String(n))}</span>
+    </div>`;
+  }).join("");
+
+  return `<div class="mw-barchart"${label ? ` aria-label="${esc(label)}"` : ""}>${rowsHtml}</div>`;
+}
+
+// rows: [{ outcome: "solved", n: 9 }, ...]. One full-width stacked bar plus a
+// legend underneath so the narrow segments stay readable.
+var DIVIDED_BAR_COLOURS = {
+  solved: "#4F2759", shown: "#4F2759",
+  switched: "#C59F40", closed: "#C59F40", timeout: "#C59F40"
+};
+
+function dividedBar(rows, keyField){
+  var list = (rows || []).filter(function(r){
+    return r && r[keyField] != null && Number.isFinite(Number(r.n)) && Number(r.n) > 0;
+  });
+  var total = list.reduce(function(s, r){ return s + Number(r.n); }, 0);
+  if (!list.length || total === 0) return `<p class="muted">Nothing recorded yet.</p>`;
+
+  var x = 0;
+  var segments = list.map(function(r){
+    var n = Number(r.n);
+    var widthPct = (n / total) * 100;
+    var colour = DIVIDED_BAR_COLOURS[r[keyField]] || "#8A8291";
+    var seg = {
+      x: x, widthPct: widthPct, colour: colour,
+      label: String(r[keyField]), n: n,
+      pct: Math.round((n / total) * 1000) / 10
+    };
+    x += widthPct;
+    return seg;
+  });
+
+  var rects = segments.map(function(s){
+    var rx = (s.x / 100 * 640).toFixed(1);
+    var rw = (s.widthPct / 100 * 640).toFixed(1);
+    var text = s.widthPct >= 8
+      ? `<text x="${((s.x + s.widthPct / 2) / 100 * 640).toFixed(1)}" y="26" font-size="12" fill="#FDFCFD" text-anchor="middle">${esc(s.label)} ${s.pct}%</text>`
+      : "";
+    return `<rect x="${rx}" y="0" width="${rw}" height="44" fill="${s.colour}"></rect>${text}`;
+  }).join("");
+
+  var legend = segments.map(function(s){
+    return `<li><span class="mw-legend-dot" style="background:${s.colour}"></span>${esc(s.label)} · ${s.n} (${s.pct}%)</li>`;
+  }).join("");
+
+  return `<div class="mw-divided-wrap">
+    <svg viewBox="0 0 640 44" role="img" class="mw-divided-bar">${rects}</svg>
+    <ul class="mw-legend">${legend}</ul>
+  </div>`;
+}
+
+// A large number with a small muted caption below.
+function bigStat(value, caption){
+  if (value === null || value === undefined || value === ""
+    || (typeof value === "number" && !Number.isFinite(value))){
+    return `<p class="muted">Nothing recorded yet.</p>`;
+  }
+  return `<div class="mw-bigstat">
+    <div class="mw-bigstat-num">${esc(String(value))}</div>
+    <div class="muted">${esc(caption || "")}</div>
+  </div>`;
+}
+
+/* --- Weekly scorecard ---------------------------------------------------
+ * Up is good for chats, devices, completion rate and helpful rate. Down is
+ * good for abandon rate. Median turns, median minutes and cost carry no
+ * good/bad judgement, so their arrows stay neutral.
+ * ------------------------------------------------------------------ */
+
+var SCORECARD_METRICS = [
+  { key: "chats", title: "Chats", good: "up",
+    fmt: function(v){ return String(Math.round(Number(v) || 0)); },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + Math.round(d); } },
+  { key: "devices", title: "Devices, not students", good: "up",
+    fmt: function(v){ return String(Math.round(Number(v) || 0)); },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + Math.round(d); } },
+  { key: "completionRate", title: "Completion rate", good: "up",
+    fmt: function(v){ return (Number(v) || 0) + "%"; },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + d + " pts"; } },
+  { key: "abandonRate", title: "Abandon rate", good: "down",
+    fmt: function(v){ return (Number(v) || 0) + "%"; },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + d + " pts"; } },
+  { key: "helpfulRate", title: "Helpful rate", good: "up",
+    fmt: function(v){ return (Number(v) || 0) + "%"; },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + d + " pts"; } },
+  { key: "medianTurns", title: "Median turns to finish", good: null,
+    fmt: function(v){ return String(Number(v) || 0); },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + d; } },
+  { key: "medianMinutes", title: "Median minutes to finish", good: null,
+    fmt: function(v){ return (Number(v) || 0) + " min"; },
+    fmtDelta: function(d){ return (d > 0 ? "+" : "") + d + " min"; } },
+  { key: "cost", title: "Estimated cost", good: null,
+    fmt: function(v){ return fmtMoney(v); },
+    fmtDelta: function(d){ return (d >= 0 ? "+" : "-") + fmtMoney(Math.abs(Number(d) || 0)); } }
+];
+
+function scorecardCardHtml(metric, tw, lw, changes){
+  var val = tw[metric.key];
+  var prevVal = lw[metric.key];
+  var ch = changes[metric.key] || { change: 0, direction: "flat", pct: 0 };
+
+  var colourClass = "mw-arrow-flat";
+  if (ch.direction !== "flat"){
+    if (metric.good === "up") colourClass = ch.direction === "up" ? "mw-arrow-good" : "mw-arrow-bad";
+    else if (metric.good === "down") colourClass = ch.direction === "down" ? "mw-arrow-good" : "mw-arrow-bad";
+    else colourClass = "mw-arrow-neutral";
+  }
+  var arrowChar = ch.direction === "up" ? "▲" : ch.direction === "down" ? "▼" : "–";
+  var changeText = ch.pct === null ? metric.fmtDelta(ch.change)
+    : ((ch.pct > 0 ? "+" : "") + ch.pct + "%");
+
+  var disclaimer = metric.key === "cost"
+    ? `<p class="tiny muted">Estimated from hand-maintained rates. Treat as relative comparison, not a bill.</p>`
+    : "";
+
+  return `<div class="mw-card">
+    <div class="mw-card-title">${esc(metric.title)}</div>
+    ${disclaimer}
+    <div class="mw-card-value">${esc(metric.fmt(val))}</div>
+    <div class="mw-card-sub ${colourClass}">${arrowChar} ${esc(changeText)} vs last week (${esc(metric.fmt(prevVal))})</div>
+  </div>`;
+}
+
+function renderScorecard(data){
+  var sc = data && data.scorecard;
+  var tw = sc && sc.thisWeek;
+  var lw = sc && sc.lastWeek;
+  var changes = (sc && sc.changes) || {};
+  if (!tw || !tw.chats) return `<p class="muted">Nothing recorded yet.</p>`;
+
+  var cards = SCORECARD_METRICS.map(function(m){
+    return scorecardCardHtml(m, tw, lw, changes);
+  }).join("");
+
+  var infoCards = `
+    <div class="mw-card">
+      <div class="mw-card-title">Top topic this week</div>
+      <div class="mw-card-value">${esc(tw.topTopic)}</div>
+    </div>
+    <div class="mw-card">
+      <div class="mw-card-title">Top year-level band this week</div>
+      <div class="mw-card-value">${esc(tw.topBand)}</div>
+    </div>`;
+
+  return `<div class="mw-cardgrid">${cards}${infoCards}</div>`;
+}
+
+/* --- Overview ------------------------------------------------------------*/
+
+function renderOverview(data){
+  var d = data || {};
+  var tw = d.scorecard && d.scorecard.thisWeek;
+  var helpfulValue = (tw && tw.chats) ? tw.helpfulRate + "%" : null;
+
+  return `
+    <div class="mw-block">
+      <h3>Chats per day, last 90 days</h3>
+      ${lineChart(d.byDay, "Chats per day")}
+    </div>
+    <div class="mw-block">
+      ${bigStat(helpfulValue, "found it helpful this week")}
+    </div>
+    <div class="mw-block">
+      <h3>By year-level band</h3>
+      ${barChart(d.byBand, "band", "By year-level band")}
+    </div>
+    <div class="mw-block">
+      <h3>By topic</h3>
+      ${barChart(d.byTopic, "topic", "By topic")}
+    </div>
+    <div class="mw-block">
+      <h3>How chats ended</h3>
+      ${dividedBar(d.totals, "outcome")}
+    </div>`;
+}
+
+/* --- Cost ------------------------------------------------------------- *
+ * The server totals cover every device. The table beneath them reads this
+ * device's own call-by-call log from mw_cost_log in localStorage, which
+ * stats.html shares an origin with mathwise.html.
+ * ------------------------------------------------------------------ */
+
+function readCostLog(){
+  try { return JSON.parse(localStorage.getItem("mw_cost_log") || "[]"); }
+  catch (e){ return []; }
+}
+
+function costDetailHtml(log){
+  var rows = Array.isArray(log) ? log : [];
+  if (!rows.length) return `<p class="muted">Nothing recorded yet.</p>`;
+
+  var sorted = rows.slice().reverse();
+  var totalCost = rows.reduce(function(s, r){ return s + (Number(r.cost) || 0); }, 0);
+
+  var body = sorted.map(function(r){
+    return `<tr>
+      <td>${esc(r.ts ? new Date(r.ts).toLocaleString() : "")}</td>
+      <td>${esc(r.session || "")}</td>
+      <td>${esc(r.purpose || "")}</td>
+      <td>${esc(r.model || "")}</td>
+      <td class="num">${esc(String(r.input || 0))}</td>
+      <td class="num">${esc(String(r.cacheWrite || 0))}</td>
+      <td class="num">${esc(String(r.cacheRead || 0))}</td>
+      <td class="num">${esc(String(r.output || 0))}</td>
+      <td class="num">${fmtMoney(r.cost)}</td>
+    </tr>`;
+  }).join("");
+
+  return `<div class="mw-scroll">
+    <table class="mw-table">
+      <thead><tr><th>Time</th><th>Session</th><th>Purpose</th><th>Model</th>
+        <th>Input</th><th>Cache write</th><th>Cache read</th><th>Output</th><th>Est. cost</th></tr></thead>
+      <tbody>
+        ${body}
+        <tr class="total"><td colspan="8">This device, all-time total</td>
+          <td class="num">${fmtMoney(totalCost)}</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderCost(data){
+  var d = data || {};
+  var cost = d.cost || {};
+  var byDayPoints = (cost.byDay || []).map(function(r){ return { day: r.period, n: r.total }; });
+  var byMonthRows = (cost.byMonth || []).map(function(r){
+    return { period: r.period, n: Math.round((Number(r.total) || 0) * 100) / 100 };
+  });
+
+  return `
+    <p class="small muted">Estimated from hand-maintained rates. Treat as relative comparison, not a bill.</p>
+    <div class="mw-block">
+      <h3>Daily cost, last 30 days, all devices</h3>
+      ${lineChart(byDayPoints, "Daily cost, all devices")}
+    </div>
+    <div class="mw-block">
+      <h3>Monthly cost, all devices</h3>
+      ${barChart(byMonthRows, "period", "Monthly cost, all devices")}
+    </div>
+    <div class="mw-cardgrid">
+      <div class="mw-card">
+        <div class="mw-card-title">This week, all devices</div>
+        <div class="mw-card-value">${fmtMoney(cost.thisWeek)}</div>
+      </div>
+      <div class="mw-card">
+        <div class="mw-card-title">Last week, all devices</div>
+        <div class="mw-card-value">${fmtMoney(cost.lastWeek)}</div>
+      </div>
+    </div>
+    <div class="mw-block" style="margin-top:20px">
+      <h3>This device's calls</h3>
+      <p class="small muted">Read from this browser's own usage log. Other devices are not
+        included here.</p>
+      ${costDetailHtml(readCostLog())}
+    </div>`;
+}
+
+/* --- Data ---------------------------------------------------------------*/
+
+function csvEscape(v){
+  var s = String(v == null ? "" : v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function buildCsv(data){
+  var d = data || {};
+  var lines = [];
+  function section(title, rows, cols){
+    lines.push(title);
+    lines.push(cols.join(","));
+    (rows || []).forEach(function(r){
+      lines.push(cols.map(function(c){ return csvEscape(r[c]); }).join(","));
+    });
+    lines.push("");
+  }
+
+  section("Outcomes", d.totals, ["outcome", "n"]);
+  section("By day", d.byDay, ["day", "n"]);
+  section("By band", d.byBand, ["band", "n"]);
+  section("By course", d.byCourse, ["course", "n"]);
+  section("By topic", d.byTopic, ["topic", "n"]);
+  section("Ratings", d.ratings, ["rating", "n"]);
+  section("Cost by day", d.cost && d.cost.byDay, ["period", "total"]);
+  section("Cost by month", d.cost && d.cost.byMonth, ["period", "total"]);
+
+  var tw = (d.scorecard && d.scorecard.thisWeek) || {};
+  var lw = (d.scorecard && d.scorecard.lastWeek) || {};
+  lines.push("Weekly scorecard");
+  lines.push("metric,this_week,last_week");
+  ["chats", "devices", "completionRate", "abandonRate", "helpfulRate",
+   "medianTurns", "medianMinutes", "topTopic", "topBand", "cost"].forEach(function(k){
+    lines.push([k, csvEscape(tw[k]), csvEscape(lw[k])].join(","));
+  });
+
+  return lines.join("\n");
+}
+
+function downloadCsv(text){
+  var blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "mathwise-stats-" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function renderData(){
+  return `
+    <div class="mw-block mw-row">
+      <button class="btn" id="btncsv">Download this data as CSV</button>
+      <button class="btn-quiet" id="btnclear">Clear this device's local data</button>
+    </div>
+    <p class="small muted">Clearing removes this browser's saved question history and cost
+      log (<code>mw_events</code> and <code>mw_cost_log</code>). Nothing on the server is
+      touched.</p>
+    <div class="mw-block" style="margin-top:16px">
+      <h3>What is collected</h3>
+      <p>MathWISE records one anonymous entry per question a student works on: a random
+        device id, the course and year level, the topic area, how the question ended, how
+        many turns it took, how long it took, whether the student rated it helpful, token
+        counts and an estimated cost, and the time.</p>
+      <p>MathWISE never records a student's name, class or group, the text of a question,
+        a photo, or any other free text. IP addresses are used briefly by the server to
+        limit abuse and are not stored.</p>
+    </div>`;
+}
+
+function wireDataButtons(){
+  var csvBtn = document.getElementById("btncsv");
+  if (csvBtn) csvBtn.onclick = function(){
+    if (lastData) downloadCsv(buildCsv(lastData));
+  };
+  var clearBtn = document.getElementById("btnclear");
+  if (clearBtn) clearBtn.onclick = function(){
+    if (!window.confirm("Clear this device's saved question history and cost log? This cannot be undone.")) return;
+    try {
+      localStorage.removeItem("mw_events");
+      localStorage.removeItem("mw_cost_log");
+    } catch (e){ /* best effort only */ }
+    if (lastData) renderAll(lastData);
+  };
+}
+
+/* --- Render everything ----------------------------------------------- */
+
+function renderAll(data){
+  lastData = data || {};
+  document.getElementById("sec-overview-body").innerHTML = renderOverview(lastData);
+  document.getElementById("sec-scorecard-body").innerHTML = renderScorecard(lastData);
+  document.getElementById("sec-cost-body").innerHTML = renderCost(lastData);
+  document.getElementById("sec-data-body").innerHTML = renderData();
+  wireDataButtons();
+}
+</script>
+</body>
+</html>
