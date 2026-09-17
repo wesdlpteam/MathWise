@@ -42,6 +42,10 @@ code{background:var(--track);padding:1px 5px;border-radius:3px;font-size:.85em}
 .mw-head{padding:6px 0 18px}
 .mw-head p{margin-top:4px;margin-bottom:0}
 
+/* A display rule beats the browser's own [hidden] styling, so state this
+   explicitly or setting .hidden = true silently does nothing. */
+[hidden]{display:none !important}
+
 .mw-gate{max-width:360px;margin:60px auto;padding:26px;border:1px solid var(--track);
   border-radius:8px;display:flex;flex-direction:column;gap:10px}
 .mw-gate label{font-weight:600;color:var(--purple);font-size:.9rem}
@@ -67,8 +71,10 @@ section.mw-section + section.mw-section{border-top:1px solid var(--track);
 .mw-chart{width:100%;height:auto;display:block}
 
 .mw-barchart{display:flex;flex-direction:column;gap:8px;max-width:100%}
-.mw-bar-row{display:grid;grid-template-columns:140px 1fr 46px;gap:10px;align-items:center;
-  font-size:.9rem}
+.mw-bar-row{display:grid;grid-template-columns:minmax(0,15rem) 1fr 46px;gap:10px;
+  align-items:center;font-size:.9rem}
+@media (max-width:640px){.mw-bar-row{grid-template-columns:1fr;gap:2px}
+  .mw-bar-label{white-space:normal}.mw-bar-count{text-align:left}}
 .mw-bar-label{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mw-bar-track{background:var(--track);border-radius:4px;height:14px;overflow:hidden}
 .mw-bar-fill{display:block;height:100%;background:var(--purple);border-radius:4px}
@@ -274,21 +280,25 @@ function lineChart(points, label){
 }
 
 // rows: [{ <keyField>: "VCE", n: 12 }, ...]. Sorts longest first itself.
-function barChart(rows, keyField, label){
+// keepOrder leaves the rows in the order they arrived. Counts read best
+// largest first, but a run of months must stay in month order: sorting those by
+// size turns a trend into a ranking and reads as if time ran backwards.
+function barChart(rows, keyField, label, keepOrder){
   var list = (rows || []).filter(function(r){
     return r && r[keyField] != null && Number.isFinite(Number(r.n));
   });
   var total = list.reduce(function(s, r){ return s + Number(r.n); }, 0);
   if (!list.length || total === 0) return `<p class="muted">Nothing recorded yet.</p>`;
 
-  var sorted = list.slice().sort(function(a, b){ return Number(b.n) - Number(a.n); });
-  var max = Number(sorted[0].n) || 1;
+  var sorted = keepOrder ? list.slice()
+    : list.slice().sort(function(a, b){ return Number(b.n) - Number(a.n); });
+  var max = list.reduce(function(m, r){ return Math.max(m, Number(r.n) || 0); }, 0) || 1;
 
   var rowsHtml = sorted.map(function(r){
     var n = Number(r.n) || 0;
     var widthPct = max ? Math.max(2, Math.round((n / max) * 100)) : 0;
     return `<div class="mw-bar-row">
-      <span class="mw-bar-label">${esc(String(r[keyField]))}</span>
+      <span class="mw-bar-label" title="${esc(String(r[keyField]))}">${esc(String(r[keyField]))}</span>
       <span class="mw-bar-track"><span class="mw-bar-fill" style="width:${widthPct}%"></span></span>
       <span class="mw-bar-count">${esc(String(n))}</span>
     </div>`;
@@ -530,7 +540,7 @@ function renderCost(data){
     </div>
     <div class="mw-block">
       <h3>Monthly cost, all devices</h3>
-      ${barChart(byMonthRows, "period", "Monthly cost, all devices")}
+      ${barChart(byMonthRows, "period", "Monthly cost, all devices", true)}
     </div>
     <div class="mw-cardgrid">
       <div class="mw-card">
