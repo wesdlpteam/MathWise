@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en-AU">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex" />
+<meta name="robots" content="noindex">
 <title>MathWISE Staff Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Sans+Egyptian+Hieroglyphs&family=Noto+Sans+Cuneiform&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --purple:#4F2759;
@@ -124,8 +124,7 @@ table.mw-table tr.total td{font-weight:600;border-top:2px solid var(--gold)}
 <body>
 <div class="wrap">
   <header class="mw-head">
-    <h1 class="wordmark"><a class="home-link" href="mathwise.html"
-      title="Back to MathWISE" aria-label="Back to MathWISE">Math<span class="wise">WISE</span></a></h1>
+    <h1 class="wordmark"><a class="home-link" href="mathwise.html" title="Back to MathWISE" aria-label="Back to MathWISE">Math<span class="wise">WISE</span></a></h1>
     <p class="muted">Staff dashboard</p>
   </header>
 
@@ -418,7 +417,7 @@ function scorecardCardHtml(metric, tw, lw, changes){
     else if (metric.good === "down") colourClass = ch.direction === "down" ? "mw-arrow-good" : "mw-arrow-bad";
     else colourClass = "mw-arrow-neutral";
   }
-  var arrowChar = ch.direction === "up" ? "▲" : ch.direction === "down" ? "▼" : "–";
+  var arrowChar = ch.direction === "up" ? "▲" : ch.direction === "down" ? "▼" : "→";
   var changeText = ch.pct === null ? metric.fmtDelta(ch.change)
     : ((ch.pct > 0 ? "+" : "") + ch.pct + "%");
 

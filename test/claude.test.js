@@ -81,11 +81,30 @@ test("an upstream failure returns a plain message, never Anthropic's own", async
   assert.equal(shown.includes("invalid credential"), false);
 });
 
-test("the caller cannot choose the model", async () => {
+test("the caller cannot choose a model outside the allow-list", async () => {
   const calls = stubUpstream();
-  const { req, res } = mockReqRes({ body: { messages: okMessages, model: "claude-opus-4-1" } });
+  for (const [sent, expected] of [
+    ["claude-opus-4-1", "claude-sonnet-4-6"],
+    [undefined, "claude-sonnet-4-6"],
+    [{ evil: true }, "claude-sonnet-4-6"],
+    ["claude-opus-5-5", "claude-opus-5-5"],
+  ]) {
+    __resetRateLimit();
+    const { req, res } = mockReqRes({ body: { messages: okMessages, model: sent } });
+    await handler(req, res);
+    assert.equal(calls[calls.length - 1].body.model, expected, `model ${sent}`);
+  }
+});
+
+test("the network re-read model in the app is on the allow-list", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../mathwise.html", import.meta.url), "utf8");
+  const m = src.match(/const NETWORK_MODEL = "([^"]+)"/);
+  assert.ok(m, "NETWORK_MODEL not found in mathwise.html");
+  const calls = stubUpstream();
+  const { req, res } = mockReqRes({ body: { messages: okMessages, model: m[1] } });
   await handler(req, res);
-  assert.equal(calls[0].body.model, "claude-sonnet-4-6");
+  assert.equal(calls[0].body.model, m[1]);
 });
 
 test("max_tokens is clamped, however it arrives", async () => {
