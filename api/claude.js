@@ -19,6 +19,11 @@ import { responseDeadline } from "./_deadline.js";
 // could name the most expensive one.
 const MODEL = "claude-sonnet-4-6";
 
+// The only other model the app asks for: it re-reads a photographed network with
+// a stronger model (NETWORK_MODEL in mathwise.html). A caller may pick from this
+// list and nothing else; any other name, or none, gets MODEL.
+const ALLOWED_MODELS = [MODEL, "claude-opus-5-5"];
+
 // The app's own largest legitimate request is 4000 tokens (a full solution).
 const MAX_TOKENS_CEILING = 4000;
 
@@ -68,7 +73,8 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: "That photo is too large. Take it again at a smaller size." });
   }
 
-  const payload = { model: MODEL, messages };
+  const model = ALLOWED_MODELS.includes(body.model) ? body.model : MODEL;
+  const payload = { model, messages };
   if (system !== undefined) payload.system = system;
   const n = Number(max_tokens);
   payload.max_tokens = Number.isFinite(n)
